@@ -2,7 +2,9 @@
 
 Method: drove the built TUI (`npm run build`, global `arena` link) inside a dedicated tmux session at 120x40 (plus an 80x24 pass), sending real keystrokes, SGR mouse clicks/wheel, and $EDITOR round-trips; captured every screen with `tmux capture-pane`. Raw captures: session scratchpad `captures/` (numbered, referenced below as `#NNN`).
 
-Status: **complete** — wizard pass + a full real-CLI live run (teamflow-taskforge, 3 teams / 4 agents: codex + claude, ~8.5 min, real claims/proposals/judging/harvest).
+Status: **complete — all findings fixed** in four commits on main (`007c4d1` correctness, `feaa415` interaction, `2fe11b2` layout, `33a413e` copy/timestamps), then re-verified by repeating the same tmux drive: wizard pass on tui-create-smoke plus a zero-token live run on the fake-agent fixture exercising claims, reject, accept, the harvest-failure banner + `h` retry, local timestamps, and `clean` killing the leftover session. `npm test` green (32 files, 198 tests, incl. new regression tests for the status-trim, mouse coalescing, rival-claim ignoring, and config-write skip).
+
+Original pass: wizard + a full real-CLI live run (teamflow-taskforge, 3 teams / 4 agents: codex + claude, ~8.5 min, real claims/proposals/judging/harvest).
 
 ## Highest-severity (live run)
 
