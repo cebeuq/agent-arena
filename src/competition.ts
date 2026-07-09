@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { formatElapsed, pluralize } from "./format.js";
 import { runCheckedRaw } from "./shell.js";
 import { sendTmuxPaneText } from "./tmux.js";
 import type { RunAgent, RunState } from "./types.js";
@@ -27,21 +28,6 @@ function nowIso(now: Date): string {
 function elapsedMs(state: RunState, now: Date): number {
   const start = new Date(state.startedAt).getTime();
   return Math.max(0, now.getTime() - start);
-}
-
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
 }
 
 function latestClaimForAgent(state: RunState, agentId: string) {
@@ -195,7 +181,7 @@ function scoreboardForAgent(state: RunState, agent: RunAgent, progress: AgentPro
       ...team.agentIds.map((agentId) => {
         const item = progress.find((candidate) => candidate.agentId === agentId);
         const latest = item?.latestClaimStatus ? `, latest claim: ${item.latestClaimStatus}` : "";
-        return `- ${item?.name ?? agentId}: ${item?.changedFiles.length ?? 0} changed file(s), ${item?.claimCount ?? 0} claim(s)${latest}`;
+        return `- ${item?.name ?? agentId}: ${pluralize(item?.changedFiles.length ?? 0, "changed file")}, ${pluralize(item?.claimCount ?? 0, "claim")}${latest}`;
       }),
       ""
     ]),

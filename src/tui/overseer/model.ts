@@ -1,3 +1,4 @@
+import { formatElapsed } from "../../format.js";
 import type { ChatMessage } from "../../chat.js";
 import { USER_SENDER_ID } from "../../chat.js";
 import type { ClaimRecord, RunAgent, RunState, RunTeam } from "../../types.js";
@@ -150,18 +151,11 @@ export function summarizePatch(patch: string): PatchSummary {
   };
 }
 
-export function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
+// Codename-first display name for banners, dialogs, and toasts — raw agent
+// ids read like internals next to the codenames used everywhere else.
+export function agentDisplayName(snapshot: RunSnapshot, agentId: string): string {
+  const agent = snapshot.state.agents.find((candidate) => candidate.id === agentId);
+  return agent?.codename ?? agent?.name ?? agentId;
 }
 
 export function elapsedLabel(snapshot: RunSnapshot, now: Date = new Date()): string {

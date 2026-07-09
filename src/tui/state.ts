@@ -39,7 +39,7 @@ export type WizardAction =
   | { type: "push"; route: Route }
   | { type: "pop" }
   | { type: "replaceStack"; stack: Route[] }
-  | { type: "setDraft"; draft: TuiDraft }
+  | { type: "setDraft"; draft: TuiDraft; markDirty?: boolean }
   | { type: "projectLoaded"; repoRoot: string; config?: ArenaConfig; error?: string; draft?: TuiDraft }
   | { type: "setNotices"; notices: string[] }
   | { type: "setBusy"; busy?: WizardBusy }
@@ -73,7 +73,10 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
     case "replaceStack":
       return action.stack.length > 0 ? { ...state, stack: action.stack } : state;
     case "setDraft":
-      return { ...state, draft: action.draft, dirty: true };
+      // markDirty:false seeds a draft during navigation (picking a source on
+      // the Project screen) without triggering the unsaved-changes quit
+      // prompt for a user who edited nothing.
+      return { ...state, draft: action.draft, dirty: action.markDirty ?? true };
     case "projectLoaded":
       return {
         ...state,

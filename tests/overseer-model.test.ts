@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../src/chat.js";
 import type { RunSnapshot } from "../src/tui/overseer/run-watcher.js";
+import { formatElapsed } from "../src/format.js";
 import {
   agentRunState,
   askedForMoreAt,
   buildThreads,
-  formatElapsed,
   pendingClaims,
   summarizePatch,
   threadMessages,

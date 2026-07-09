@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { notifyRivalsOfClaim, updateCompetitionArtifacts } from "./competition.js";
 import { refreshAllMirrors } from "./mirror.js";
 import { readRunState, resolveStatePath, withRunLock, writeRunState } from "./run-state.js";
+import { formatElapsed } from "./format.js";
 import { runCheckedRaw, runShell } from "./shell.js";
 import { sendTmuxPaneCtrlC, sendTmuxPaneText } from "./tmux.js";
 import type { ClaimRecord, RunAgent, RunState, ShellResult } from "./types.js";
@@ -62,29 +63,29 @@ function gitSummary(workspace: string): string {
 async function writeFinalReport(state: RunState, claim: ClaimRecord): Promise<void> {
   const reportPath = path.join(state.runDir, "final-report.md");
   const winner = state.agents.find((agent) => agent.id === claim.agentId);
+  // Manual accepts have no verifier run — two "(empty)" fenced blocks read
+  // like a failure, so only include output that exists.
+  const hasClaimOutput = Boolean(claim.stdout.trim() || claim.stderr.trim());
   const lines = [
     "# Agent Arena Final Report",
     "",
     `Run: ${state.runId}`,
     `Winner: ${winner?.name ?? claim.agentId}`,
     `Finished: ${state.finishedAt}`,
+    ...(state.winner?.elapsedMs !== undefined ? [`Elapsed: ${formatElapsed(state.winner.elapsedMs)}`] : []),
     "",
     "## Goal",
     "",
     state.goal,
     "",
-    "## Winning Claim Output",
-    "",
-    "stdout:",
-    "```",
-    claim.stdout.trim() || "(empty)",
-    "```",
-    "",
-    "stderr:",
-    "```",
-    claim.stderr.trim() || "(empty)",
-    "```",
-    "",
+    ...(hasClaimOutput
+      ? [
+          "## Winning Claim Output",
+          "",
+          ...(claim.stdout.trim() ? ["stdout:", "```", claim.stdout.trim(), "```", ""] : []),
+          ...(claim.stderr.trim() ? ["stderr:", "```", claim.stderr.trim(), "```", ""] : [])
+        ]
+      : []),
     "## Agent Workspaces",
     "",
     ...state.agents.flatMap((agent) => [`- ${agent.name}: ${agent.workspace}`]),

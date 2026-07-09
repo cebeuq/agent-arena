@@ -143,7 +143,7 @@ describe("overseer app", () => {
       <OverseerApp watcher={fakeWatcher(snapshot)} actions={actions} initialSnapshot={snapshot} />
     );
 
-    await waitFor(() => expect(lastFrame()).toContain("claims FINISH"));
+    await waitFor(() => expect(lastFrame()).toContain("claims finish"));
     await press(stdin, "4");
     await waitFor(() => expect(lastFrame()).toContain("Pending claims (1)"));
     await press(stdin, "a");
@@ -168,7 +168,7 @@ describe("overseer app", () => {
     await press(stdin, "4");
     await waitFor(() => expect(lastFrame()).toContain("Claim by Nova"));
     await press(stdin, "x");
-    await waitFor(() => expect(lastFrame()).toContain("Reject red-1's claim"));
+    await waitFor(() => expect(lastFrame()).toContain("Reject Nova's claim"));
     stdin.write("not done yet");
     await waitFor(() => expect(lastFrame()).toContain("not done yet"));
     await press(stdin, "\r");
@@ -214,7 +214,7 @@ describe("overseer app", () => {
     );
 
     await waitFor(() => {
-      expect(lastFrame()).toContain("WINNER: red-1");
+      expect(lastFrame()).toContain("WINNER: Nova");
       expect(lastFrame()).toContain("FINISHED");
     });
     await press(stdin, "p"); // pressure must be ignored in read-only mode

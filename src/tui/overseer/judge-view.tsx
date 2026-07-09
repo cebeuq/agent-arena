@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import type { ClaimRecord } from "../../types.js";
+import { formatLocalTime, pluralize } from "../../format.js";
 import { theme } from "../theme.js";
 import { useKeys } from "../keys/useKeys.js";
 import { Panel } from "../components/Panel.js";
@@ -8,7 +9,7 @@ import { SelectList, type SelectListItem } from "../components/SelectList.js";
 import { useModal } from "../components/ModalProvider.js";
 import { openTextPrompt } from "../components/prompts.js";
 import { useTerminalSize } from "../components/useTerminalSize.js";
-import { askedForMoreAt, pendingClaims } from "./model.js";
+import { agentDisplayName, askedForMoreAt, pendingClaims } from "./model.js";
 import { useOverseer } from "./overseer-app.js";
 
 export function JudgeView(): React.ReactElement {
@@ -42,7 +43,7 @@ export function JudgeView(): React.ReactElement {
     void modal
       .confirm({
         title: "Accept claim and END the run?",
-        message: `${target.agentId} wins, the other ${rivals} agent pane(s) are interrupted with Ctrl-C, and the final report is written. This cannot be undone.`,
+        message: `${agentDisplayName(snapshot, target.agentId)} wins, the other ${pluralize(rivals, "agent pane")} ${rivals === 1 ? "is" : "are"} interrupted with Ctrl-C, and the final report is written. This cannot be undone.`,
         confirmLabel: "Accept & finish",
         cancelLabel: "Cancel",
         danger: true
@@ -52,7 +53,7 @@ export function JudgeView(): React.ReactElement {
           void runAction("Finishing run (interrupting rival panes)…", () => actions.acceptClaim(target.agentId)).then(
             (accepted) => {
               if (accepted) {
-                showToast(`Accepted ${target.agentId}'s claim. Run finished.`, "info");
+                showToast(`Accepted ${agentDisplayName(snapshot, target.agentId)}'s claim. Run finished.`, "info");
                 offerHarvest(target.agentId);
               }
             }
@@ -65,7 +66,7 @@ export function JudgeView(): React.ReactElement {
 
   function rejectSelected(target: ClaimRecord): void {
     void openTextPrompt(modal, {
-      title: `Reject ${target.agentId}'s claim`,
+      title: `Reject ${agentDisplayName(snapshot, target.agentId)}'s claim`,
       label: "Optional reason shown to the agent in its pane.",
       placeholder: "e.g. tests still failing on the edge cases",
       width: 70
@@ -76,7 +77,7 @@ export function JudgeView(): React.ReactElement {
       void runAction("Rejecting claim…", () => actions.rejectClaim(target.agentId, note || undefined)).then(
         (rejected) => {
           if (rejected) {
-            showToast(`Rejected ${target.agentId}'s claim; the agent was notified.`, "info");
+            showToast(`Rejected ${agentDisplayName(snapshot, target.agentId)}'s claim; the agent was notified.`, "info");
           }
         }
       );
@@ -85,7 +86,7 @@ export function JudgeView(): React.ReactElement {
 
   function askSelected(target: ClaimRecord): void {
     void openTextPrompt(modal, {
-      title: `Ask ${target.agentId} for more`,
+      title: `Ask ${agentDisplayName(snapshot, target.agentId)} for more`,
       label: "Sends a Director DM; the claim stays pending.",
       placeholder: "e.g. how did you verify the benchmark numbers?",
       width: 70
@@ -95,7 +96,7 @@ export function JudgeView(): React.ReactElement {
       }
       void runAction("Sending question…", () => actions.askForMore(target.agentId, question.trim())).then((sent) => {
         if (sent) {
-          showToast(`Question sent to ${target.agentId}.`, "info");
+          showToast(`Question sent to ${agentDisplayName(snapshot, target.agentId)}.`, "info");
         }
       });
     });
@@ -125,7 +126,7 @@ export function JudgeView(): React.ReactElement {
     return {
       value: candidate.agentId,
       label: `${candidateAgent?.codename ?? candidate.agentId} (${candidate.agentId}) — ${candidateAgent?.teamName ?? candidate.teamId ?? ""}`,
-      detail: `claimed ${candidate.claimedAt.slice(11, 19)}`
+      detail: `claimed ${formatLocalTime(candidate.claimedAt, { seconds: true })}`
     };
   });
 
@@ -149,8 +150,8 @@ export function JudgeView(): React.ReactElement {
       {claim && agent ? (
         <Panel title={`Claim by ${agent.codename} (${agent.id})`} flexGrow={1}>
           <Text color={theme.dim}>
-            {agent.teamName} captain · claimed at {claim.claimedAt}
-            {askedAt ? ` · asked for more at ${askedAt.slice(11, 19)}` : ""}
+            {agent.teamName} captain · claimed at {formatLocalTime(claim.claimedAt, { date: true, seconds: true })}
+            {askedAt ? ` · asked for more at ${formatLocalTime(askedAt, { seconds: true })}` : ""}
           </Text>
           <Text wrap="truncate">Goal: {snapshot.state.goal}</Text>
           <Text>
@@ -184,7 +185,7 @@ export function JudgeView(): React.ReactElement {
           {verdictHistory.length > 0 ? (
             verdictHistory.slice(-10).map((candidate, index) => (
               <Text key={`${candidate.agentId}-${index}`} color={theme.dim} wrap="truncate">
-                {candidate.agentId}: {candidate.status} at {candidate.verifiedAt ?? candidate.claimedAt}
+                {candidate.agentId}: {candidate.status} at {formatLocalTime(candidate.verifiedAt ?? candidate.claimedAt, { date: true })}
                 {candidate.note ? ` — ${candidate.note}` : ""}
               </Text>
             ))

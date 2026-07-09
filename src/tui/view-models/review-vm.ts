@@ -64,7 +64,7 @@ export function reviewSections(
           return agentId;
         }
         const label = agent.codename ?? agent.name ?? agent.id;
-        return `${label} (${agent.id}, ${agent.preset ?? "custom"})${agent.id === team.captainAgentId ? " captain" : ""}`;
+        return `${label === agent.id ? agent.id : `${label} (${agent.id})`} · ${agent.preset ?? "custom"}${agent.id === team.captainAgentId ? " · captain" : ""}`;
       })
       .join(", ");
     lines.push(plain(`  - ${team.name} (${team.id}): ${members || "no agents"}`));
@@ -103,7 +103,10 @@ export function reviewSections(
   lines.push(blank());
 
   lines.push(title("Harness settings"));
-  for (const agent of config.agents) {
+  // Same ordering as the Teams section above, not config-file order.
+  const teamOrder = new Map((config.teams ?? []).flatMap((team, teamIndex) => team.agentIds.map((id, memberIndex) => [id, teamIndex * 100 + memberIndex] as const)));
+  const orderedAgents = [...config.agents].sort((left, right) => (teamOrder.get(left.id) ?? 9999) - (teamOrder.get(right.id) ?? 9999));
+  for (const agent of orderedAgents) {
     lines.push(
       plain(
         `  - ${agent.codename ? `${agent.codename} ` : ""}${agent.id}: ${agent.preset ?? "custom"}, model ${

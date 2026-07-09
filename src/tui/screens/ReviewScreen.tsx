@@ -5,6 +5,7 @@ import { readSecretsEnv, type ResourceAvailabilityContext } from "../../resource
 import { selectSetupHelper } from "../../setup.js";
 import { configFromDraft, draftWarnings, reviewJson, selectedAgentPresets } from "../../tui-model.js";
 import type { ArenaConfig } from "../../types.js";
+import { pluralize } from "../../format.js";
 import { theme } from "../theme.js";
 import { hint } from "../keys/keymap.js";
 import { useKeys } from "../keys/useKeys.js";
@@ -228,7 +229,7 @@ export function ReviewScreen(): React.ReactElement {
     >
       <Box flexGrow={1}>
         <Box width="68%" flexDirection="column" ref={contractRef}>
-          <Panel title={`Draft contract — ${view}${scrollLabel}`} flexGrow={1}>
+          <Panel title={`Draft contract${view === "json" ? " — JSON" : ""}${scrollLabel}`} flexGrow={1}>
             {visible.map((line, index) => (
               <Text key={`${clampedScroll + index}`} color={lineColor(line)} wrap="truncate">
                 {line.text || " "}
@@ -251,7 +252,17 @@ export function ReviewScreen(): React.ReactElement {
             />
             <Text> </Text>
             {warnings.length > 0 ? (
-              <Text color={theme.warning}>{warnings.length} warning(s) — see contract.</Text>
+              <Box flexDirection="column">
+                {/* Warnings listed here directly — previously only a count
+                    pointing into the (scrollable) contract text. */}
+                <Text color={theme.warning}>{pluralize(warnings.length, "warning")}:</Text>
+                {warnings.slice(0, 6).map((warning) => (
+                  <Text key={warning} color={theme.warning} wrap="wrap">
+                    - {warning}
+                  </Text>
+                ))}
+                {warnings.length > 6 ? <Text color={theme.dim}>…and {warnings.length - 6} more.</Text> : null}
+              </Box>
             ) : (
               <Text color={theme.success}>No warnings.</Text>
             )}

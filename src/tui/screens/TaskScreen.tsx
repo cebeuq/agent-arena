@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import { agentPresets } from "../../presets.js";
 import { selectSetupHelper } from "../../setup.js";
 import { selectedAgentPresets } from "../../tui-model.js";
+import { pluralize } from "../../format.js";
 import { glyphs, theme } from "../theme.js";
 import { hint } from "../keys/keymap.js";
 import { useKeys } from "../keys/useKeys.js";
@@ -182,7 +183,7 @@ export function TaskScreen(): React.ReactElement {
         <FieldRow label="Done when" selected={selectedField === "doneWhen"}>
           <Text color={draft.successCriteria.length === 0 ? theme.dim : undefined}>
             {draft.successCriteria.length > 0
-              ? `${draft.successCriteria.length} checkpoint(s) — Enter to edit`
+              ? `${pluralize(draft.successCriteria.length, "checkpoint")} — Enter to edit`
               : "optional — Enter to add checkpoints the captain verifies before claiming"}
           </Text>
         </FieldRow>

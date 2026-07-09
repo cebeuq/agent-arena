@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text } from "ink";
 import { agentPresets } from "../../presets.js";
+import { formatLocalTime, pluralize } from "../../format.js";
 import { glyphs, theme } from "../theme.js";
 import { useKeys } from "../keys/useKeys.js";
 import { Panel } from "../components/Panel.js";
@@ -161,14 +162,14 @@ export function DashboardView(): React.ReactElement {
               </Text>
             )}
             <Text wrap="truncate">
-              {selectedProgress?.changedFiles.length ?? 0} changed file(s)
+              {pluralize(selectedProgress?.changedFiles.length ?? 0, "changed file")}
               {selectedProgress?.changedFiles.length
                 ? `: ${selectedProgress.changedFiles.slice(0, 5).join(", ")}${selectedProgress.changedFiles.length > 5 ? "…" : ""}`
                 : ""}
-              {snapshot.progressUpdatedAt ? `  (updated ${snapshot.progressUpdatedAt.slice(11, 19)})` : ""}
+              {snapshot.progressUpdatedAt ? `  (updated ${formatLocalTime(snapshot.progressUpdatedAt, { seconds: true })})` : ""}
             </Text>
             <Text wrap="truncate">
-              latest claim: {latestClaim ? `${latestClaim.status} at ${latestClaim.claimedAt}` : "none"}
+              latest claim: {latestClaim ? `${latestClaim.status} at ${formatLocalTime(latestClaim.claimedAt, { date: true })}` : "none"}
             </Text>
           </Box>
         ) : (

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { Box, Text, useApp } from "ink";
 import { tmuxAttachCommand, type TerminalAttachMode } from "../../terminal.js";
 import { attachTmux, openAgentPaneExternal } from "../../tmux.js";
+import { pluralize } from "../../format.js";
 import { glyphs, theme } from "../theme.js";
 import { KeyProvider } from "../keys/KeyProvider.js";
 import { useKeys, KEY_PRIORITY } from "../keys/useKeys.js";
@@ -14,7 +15,7 @@ import { Panel } from "../components/Panel.js";
 import { Spinner } from "../components/Spinner.js";
 import { useToast } from "../components/useToast.js";
 import { LayerContext } from "../layers.js";
-import { elapsedLabel, pendingClaims, buildThreads } from "./model.js";
+import { agentDisplayName, elapsedLabel, pendingClaims, buildThreads } from "./model.js";
 import type { OverseerActions } from "./actions.js";
 import type { RunSnapshot, RunWatcher } from "./run-watcher.js";
 import { DashboardView } from "./dashboard.js";
@@ -110,7 +111,7 @@ function OverseerRoot({
     if (snapshot.state.status === "finished" && !announcedFinish) {
       setAnnouncedFinish(true);
       showToast(
-        `Run finished — winner ${snapshot.state.winner?.agentId ?? "unknown"}. Mutating actions disabled.`,
+        `Run finished — winner ${snapshot.state.winner ? agentDisplayName(snapshot, snapshot.state.winner.agentId) : "unknown"}. Mutating actions disabled.`,
         "info"
       );
     }
@@ -147,7 +148,7 @@ function OverseerRoot({
     void modal
       .confirm({
         title: "Harvest the winner's work?",
-        message: `Commits ${winnerAgentId}'s work to its arena branch and merges it into the checked-out branch of the base repo. You can also do this later with: arena harvest --run ${snapshot.state.runId}`,
+        message: `Commits ${agentDisplayName(snapshot, winnerAgentId)}'s work to its arena branch and merges it into the checked-out branch of the base repo. You can also do this later with: arena harvest --run ${snapshot.state.runId}`,
         confirmLabel: "Harvest & merge",
         cancelLabel: "Later",
         // Merging into the base repo is hard to undo; default to the safe side.
@@ -237,7 +238,7 @@ function OverseerRoot({
         if (confirmed) {
           void runAction("Sending pressure notice…", () => actions.sendPressure({})).then((count) => {
             if (count !== undefined) {
-              showToast(`Sent pressure notice to ${count} agent(s).`, "info");
+              showToast(`Sent pressure notice to ${pluralize(count, "agent")}.`, "info");
             }
           });
         }
@@ -419,7 +420,7 @@ function OverseerRoot({
         {snapshot.state.status === "finished" && snapshot.state.winner ? (
           <Box flexShrink={0}>
             <Text color={theme.success} wrap="truncate">
-              {glyphs.captain} WINNER: {snapshot.state.winner.agentId} —{" "}
+              {glyphs.captain} WINNER: {agentDisplayName(snapshot, snapshot.state.winner.agentId)} —{" "}
               {snapshot.state.harvest
                 ? snapshot.state.harvest.merged
                   ? `harvested into ${snapshot.state.harvest.targetBranch}`
@@ -432,7 +433,7 @@ function OverseerRoot({
         ) : pending.length > 0 ? (
           <Clickable onPress={() => setView("judge")}>
             <Text color={theme.warning}>
-              ! {pending.map((claim) => claim.agentId).join(", ")} claim{pending.length === 1 ? "s" : ""} FINISH — press
+              ! {pending.map((claim) => agentDisplayName(snapshot, claim.agentId)).join(", ")} claim{pending.length === 1 ? "s" : ""} finish — press
               4 to judge
             </Text>
           </Clickable>

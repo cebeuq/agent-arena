@@ -70,7 +70,8 @@ export function TeamsScreen(): React.ReactElement {
     const result = addTeamDraft(draft);
     setDraft(result.draft);
     setSelected(`team:${result.teamId}`);
-    showToast(`Added ${result.teamId} with one codex agent.`, "info");
+    const added = result.draft.teams.find((team) => team.id === result.teamId);
+    showToast(`Added ${added?.name ?? result.teamId} with one codex agent.`, "info");
   }
 
   function makeCaptain(): void {

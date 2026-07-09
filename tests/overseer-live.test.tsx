@@ -139,13 +139,13 @@ describe.runIf(hasTmuxAndGit)("overseer against a live run", () => {
 
     // An agent claims (as the claim script would); banner appears.
     await claimRun({ runId: state.runId, agentId: "alpha", statePath: state.statePath });
-    await waitFor(() => expect(lastFrame()).toContain("claims FINISH"));
+    await waitFor(() => expect(lastFrame()).toContain("claims finish"));
 
     // Reject with a note from the judge view.
     await press(stdin, "4");
     await waitFor(() => expect(lastFrame()).toContain("Pending claims (1)"));
     await press(stdin, "x");
-    await waitFor(() => expect(lastFrame()).toContain("Reject alpha's claim"));
+    await waitFor(() => expect(lastFrame()).toContain(`Reject ${state.agents[0].codename ?? "alpha"}'s claim`));
     stdin.write("needs verification");
     await new Promise((resolve) => setTimeout(resolve, 80));
     await press(stdin, "\r");
@@ -165,7 +165,7 @@ describe.runIf(hasTmuxAndGit)("overseer against a live run", () => {
     });
     await press(stdin, "y");
     await waitFor(() => {
-      expect(lastFrame()).toContain("WINNER: alpha");
+      expect(lastFrame()).toContain(`WINNER: ${state.agents[0].codename ?? "alpha"}`);
       expect(lastFrame()).toContain("FINISHED");
     }, 15000);
 

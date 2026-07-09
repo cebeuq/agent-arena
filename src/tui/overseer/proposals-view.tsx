@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import React, { useEffect, useState } from "react";
 import { Box, Text } from "ink";
 import type { ProposalRecord } from "../../proposals.js";
+import { pluralize } from "../../format.js";
 import { theme } from "../theme.js";
 import { useKeys } from "../keys/useKeys.js";
 import { Panel } from "../components/Panel.js";
@@ -127,7 +128,7 @@ export function ProposalsView(): React.ReactElement {
         {patchSummary ? (
           <Box flexDirection="column">
             <Text>
-              Patch: {patchSummary.files.length} file(s), +{patchSummary.additions} −{patchSummary.deletions}
+              Patch: {pluralize(patchSummary.files.length, "file")}, +{patchSummary.additions} −{patchSummary.deletions}
               <Text color={theme.dim}>  {detail.patchPath}</Text>
             </Text>
             {patchSummary.files.slice(0, Math.max(3, rows - 18)).map((file) => (

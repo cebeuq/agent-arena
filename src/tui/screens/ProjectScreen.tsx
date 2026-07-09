@@ -118,12 +118,12 @@ export function ProjectScreen(): React.ReactElement {
 
   function activate(value: SourceValue): void {
     if (value === "__edit__") {
-      dispatch({ type: "setDraft", draft: draftFromConfig(state.existingConfig) });
+      dispatch({ type: "setDraft", draft: draftFromConfig(state.existingConfig), markDirty: false });
       dispatch({ type: "push", route: { name: "teams" } });
       return;
     }
     if (value === "__new__") {
-      dispatch({ type: "setDraft", draft: freshDraft() });
+      dispatch({ type: "setDraft", draft: freshDraft(), markDirty: false });
       dispatch({ type: "push", route: { name: "teams" } });
       return;
     }
@@ -228,9 +228,9 @@ export function ProjectScreen(): React.ReactElement {
             <Text> </Text>
             {state.existingConfig ? (
               <Text>
-                <Text color={theme.success}>arena.config.json found </Text>
+                <Text color={theme.success}>arena.config.json found</Text>
                 <Text color={theme.dim}>
-                  Teams: {state.existingConfig.teams.length} Agents: {state.existingConfig.agents.length}
+                  {" "}· {state.existingConfig.teams.length} teams · {state.existingConfig.agents.length} agents
                 </Text>
               </Text>
             ) : (

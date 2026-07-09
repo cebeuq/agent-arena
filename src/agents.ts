@@ -9,7 +9,7 @@ export function listAgents(): void {
     console.log(`  name: ${preset.displayName}`);
     console.log(`  binary: ${preset.binary}`);
     console.log(`  prompt command: ${preset.promptCommand}`);
-    console.log(`  goal command: ${preset.goalCommand ?? "not documented"}`);
+    console.log(`  goal command: ${preset.goalCommand ?? "none — runs in prompt mode"}`);
     console.log(`  docs: ${preset.docsUrl}`);
     console.log(`  install: ${preset.installHint}`);
     console.log("");

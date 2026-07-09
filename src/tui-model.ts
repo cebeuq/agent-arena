@@ -139,11 +139,28 @@ export function addAgentDraft(
 
 export function addTeamDraft(draft: TuiDraft): { draft: TuiDraft; teamId: string; agentId: string } {
   const existing = new Set(draft.teams.map((team) => team.id));
-  let index = draft.teams.length + 1;
-  let teamId = `team-${index}`;
-  while (existing.has(teamId)) {
-    index += 1;
+  // Continue the color scheme the default teams establish (Team Red, Team
+  // Blue, …) instead of jumping to "Team 3"; fall back to numbers once the
+  // palette is exhausted.
+  const colorNames = ["Red", "Blue", "Green", "Yellow", "Magenta", "Cyan", "White"];
+  let teamId: string | undefined;
+  let teamName: string | undefined;
+  for (const color of colorNames) {
+    const candidate = color.toLowerCase();
+    if (!existing.has(candidate) && !existing.has(`team-${candidate}`)) {
+      teamId = candidate;
+      teamName = `Team ${color}`;
+      break;
+    }
+  }
+  if (!teamId || !teamName) {
+    let index = draft.teams.length + 1;
     teamId = `team-${index}`;
+    while (existing.has(teamId)) {
+      index += 1;
+      teamId = `team-${index}`;
+    }
+    teamName = `Team ${index}`;
   }
   const agent = addAgentDraft(draft, teamId, {
     preset: "codex",
@@ -156,7 +173,7 @@ export function addTeamDraft(draft: TuiDraft): { draft: TuiDraft; teamId: string
         ...draft.teams,
         {
           id: teamId,
-          name: `Team ${index}`,
+          name: teamName,
           captainAgentId: agent.agentId,
           resources: []
         }
@@ -485,7 +502,7 @@ export function teamSummaryLines(config: ArenaConfig): string[] {
           return agentId;
         }
         const label = agent.codename ?? agent.name ?? agent.id;
-        return `${label} (${agent.id}, ${agent.preset ?? "custom"})${agent.id === team.captainAgentId ? " captain" : ""}`;
+        return `${label === agent.id ? agent.id : `${label} (${agent.id})`} · ${agent.preset ?? "custom"}${agent.id === team.captainAgentId ? " · captain" : ""}`;
       })
       .join(", ");
     return [`- ${team.name} (${team.id})`, `  captain: ${team.captainAgentId}`, `  agents: ${members || "none"}`];

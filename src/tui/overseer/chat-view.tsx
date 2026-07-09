@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, type DOMElement } from "ink";
 import { USER_SENDER_ID } from "../../chat.js";
+import { formatLocalTime } from "../../format.js";
 import { theme } from "../theme.js";
 import { useKeys } from "../keys/useKeys.js";
 import { useMouseRegion } from "../mouse/useMouseRegion.js";
@@ -162,7 +163,7 @@ export function ChatView(): React.ReactElement {
               visible.map((message) =>
                 renderMessage(
                   message.id,
-                  `${message.createdAt.slice(11, 16)} ${message.fromCodename}`,
+                  `${formatLocalTime(message.createdAt)} ${message.fromCodename}`,
                   message.message,
                   message.fromAgentId === USER_SENDER_ID
                 )

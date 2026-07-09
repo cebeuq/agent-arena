@@ -10,6 +10,7 @@ import {
   writeRunState,
   type LocalRunState
 } from "./run-state.js";
+import { pluralize } from "./format.js";
 import { killTmuxSession, killTmuxViewSessions } from "./tmux.js";
 import type { RunState } from "./types.js";
 
@@ -202,7 +203,7 @@ async function cleanSingleRun(entry: LocalRunState, options: CleanRunOptions): P
   await deregisterRun(state.runId);
 
   messages.push(
-    `Cleaned run ${state.runId}: removed ${removedWorkspaces} workspace(s)${options.deleteBranches ? `, deleted ${deletedBranches} branch(es)` : ""}.`
+    `Cleaned run ${state.runId}: removed ${pluralize(removedWorkspaces, "workspace")}${options.deleteBranches ? `, deleted ${pluralize(deletedBranches, "branch", "branches")}` : ""}.`
   );
   return { runId: state.runId, removedWorkspaces, deletedBranches, messages };
 }
