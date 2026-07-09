@@ -1,7 +1,7 @@
 import React, { createContext, useEffect, useMemo, useRef } from "react";
 import { useStdin, type DOMElement } from "ink";
 import { absoluteRect, rectArea, rectContains, type Rect } from "./geometry.js";
-import { isPrimaryClick, parseMouseInput } from "./parse.js";
+import { isPrimaryClick, parseMouseInputs, type TerminalMouseEvent } from "./parse.js";
 
 export type MousePressEvent = {
   localX: number;
@@ -60,11 +60,7 @@ export function MouseProvider({ children }: { children: React.ReactNode }): Reac
       return;
     }
 
-    const listener = (data: Buffer | string): void => {
-      const event = parseMouseInput(String(data));
-      if (!event) {
-        return;
-      }
+    const dispatchEvent = (event: TerminalMouseEvent): void => {
       // SGR coordinates are 1-based; rects are 0-based.
       const pointX = event.x - 1;
       const pointY = event.y - 1;
@@ -107,6 +103,14 @@ export function MouseProvider({ children }: { children: React.ReactNode }): Reac
         localX: pointX - innermost.rect.x,
         localY: pointY - innermost.rect.y
       });
+    };
+
+    const listener = (data: Buffer | string): void => {
+      // A single read can carry several sequences (fast click = press+release
+      // in one chunk); dispatch each one.
+      for (const event of parseMouseInputs(String(data))) {
+        dispatchEvent(event);
+      }
     };
 
     stdin.on("data", listener);

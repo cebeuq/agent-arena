@@ -94,12 +94,14 @@ export function ReviewScreen(): React.ReactElement {
     {
       value: "feedback",
       label: "Send feedback to helper…",
-      disabled: !helper,
-      disabledReason: "No selected agent CLI is installed to act as setup helper."
+      disabled: !helper || !state.helperRan,
+      disabledReason: !helper
+        ? "No selected agent CLI is installed to act as setup helper."
+        : "No helper has run yet — use Run helper first."
     },
     {
       value: "rerun",
-      label: "Rerun helper",
+      label: state.helperRan ? "Rerun helper" : "Run helper",
       disabled: !helper,
       disabledReason: "No selected agent CLI is installed to act as setup helper."
     },
@@ -219,6 +221,9 @@ export function ReviewScreen(): React.ReactElement {
               onActivate={activate}
               height={actions.length}
               onDisabledActivate={(reason) => showToast(reason, "warn")}
+              // The actions list is short and fully visible; let PgUp/PgDn
+              // fall through to the contract-panel scroll handler.
+              pageKeys={false}
             />
             <Text> </Text>
             {warnings.length > 0 ? (

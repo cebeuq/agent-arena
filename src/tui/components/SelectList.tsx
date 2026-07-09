@@ -23,6 +23,10 @@ export type SelectListProps<T extends string> = {
   height: number;
   focused?: boolean;
   onDisabledActivate?: (reason: string) => void;
+  // When false, PgUp/PgDn are not consumed by the list and fall through to
+  // lower-priority handlers (e.g. a screen-level scroll region). Use for short
+  // fully-visible lists where paging is a no-op anyway.
+  pageKeys?: boolean;
 };
 
 type Window = {
@@ -68,7 +72,8 @@ export function SelectList<T extends string>({
   onActivate,
   height,
   focused = true,
-  onDisabledActivate
+  onDisabledActivate,
+  pageKeys = true
 }: SelectListProps<T>): React.ReactElement {
   const containerRef = useRef<DOMElement | null>(null);
   const [offset, setOffset] = useState(0);
@@ -147,10 +152,16 @@ export function SelectList<T extends string>({
         return true;
       }
       if (key.pageUp) {
+        if (!pageKeys) {
+          return false;
+        }
         moveSelection(-window.capacity);
         return true;
       }
       if (key.pageDown) {
+        if (!pageKeys) {
+          return false;
+        }
         moveSelection(window.capacity);
         return true;
       }

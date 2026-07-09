@@ -396,6 +396,22 @@ describe("claim verification", () => {
     expect(finalState.claims.map((claim) => claim.status)).toEqual(["accepted"]);
   });
 
+  it("marks rival pending claims ignored when a claim is accepted", async () => {
+    const state = await makeState("manual");
+    await claimRun({ runId: state.runId, agentId: "a", statePath: state.statePath });
+    await claimRun({ runId: state.runId, agentId: "b", statePath: state.statePath });
+
+    await acceptManualClaim({ runId: state.runId, agentId: "a", statePath: state.statePath });
+
+    const finalState = JSON.parse(await fs.readFile(state.statePath, "utf8")) as RunState;
+    // A finished run can never judge the rival's claim; leaving it "pending"
+    // kept a stale judge banner/badge alive in the overseer.
+    const rival = finalState.claims.find((claim) => claim.agentId === "b");
+    expect(rival?.status).toBe("ignored");
+    expect(rival?.note).toMatch(/finished before this claim was judged/);
+    expect(finalState.claims.find((claim) => claim.agentId === "a")?.status).toBe("accepted");
+  });
+
   it("records captain manual claims with team winners", async () => {
     const state = await makeTeamState();
 

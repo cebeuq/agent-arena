@@ -149,7 +149,9 @@ function OverseerRoot({
         title: "Harvest the winner's work?",
         message: `Commits ${winnerAgentId}'s work to its arena branch and merges it into the checked-out branch of the base repo. You can also do this later with: arena harvest --run ${snapshot.state.runId}`,
         confirmLabel: "Harvest & merge",
-        cancelLabel: "Later"
+        cancelLabel: "Later",
+        // Merging into the base repo is hard to undo; default to the safe side.
+        defaultButton: "cancel"
       })
       .then((confirmed) => {
         if (!confirmed) {
@@ -393,9 +395,13 @@ function OverseerRoot({
         <Box flexShrink={0} gap={2}>
           {statusBadge(snapshot)}
           <Text color={theme.dim}>judging: {snapshot.state.judging.mode}</Text>
-          <Text color={snapshot.daemonAlive ? theme.dim : theme.error}>
-            daemon: {snapshot.daemonAlive ? "ok" : "DEAD (R restarts)"}
-          </Text>
+          {/* The mirror daemon legitimately exits when a run ends, so only
+              running runs show its health (and the R-restart hint). */}
+          {readOnly ? null : (
+            <Text color={snapshot.daemonAlive ? theme.dim : theme.error}>
+              daemon: {snapshot.daemonAlive ? "ok" : "DEAD (R restarts)"}
+            </Text>
+          )}
           <Text color={snapshot.tmuxAlive ? theme.dim : theme.error}>tmux: {snapshot.tmuxAlive ? "ok" : "GONE"}</Text>
         </Box>
         <Box flexShrink={0} gap={1}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { enterTuiScreen, leaveTuiScreen } from "../src/tui/screen-control.js";
-import { parseMouseInput } from "../src/tui/mouse/parse.js";
+import { isMouseOnlyInput, parseMouseInput, parseMouseInputs } from "../src/tui/mouse/parse.js";
 
 function stream(isTTY = true): { writes: string[]; stream: { isTTY: boolean; write: (chunk: string) => void } } {
   const writes: string[] = [];
@@ -67,5 +67,23 @@ describe("TUI terminal screen control", () => {
       kind: "scrollDown"
     });
     expect(parseMouseInput("x")).toBeUndefined();
+  });
+
+  it("scans multiple SGR sequences batched into one stdin chunk", () => {
+    // A fast click delivers press+release in a single read; both must survive.
+    const events = parseMouseInputs("\x1b[<0;10;5M\x1b[<0;10;5m");
+    expect(events.map((event) => event.kind)).toEqual(["press", "release"]);
+    expect(events[0]).toMatchObject({ x: 10, y: 5, buttonCode: 0 });
+
+    expect(parseMouseInputs("\x1b[<64;3;2M\x1b[<64;3;2M\x1b[<64;3;2M")).toHaveLength(3);
+    expect(parseMouseInputs("plain keys")).toEqual([]);
+  });
+
+  it("identifies mouse-only chunks for the key path", () => {
+    expect(isMouseOnlyInput("\x1b[<0;10;5M\x1b[<0;10;5m")).toBe(true);
+    expect(isMouseOnlyInput("[<0;10;5M")).toBe(true);
+    expect(isMouseOnlyInput("q")).toBe(false);
+    expect(isMouseOnlyInput("\x1b[<0;10;5Mq")).toBe(false);
+    expect(isMouseOnlyInput("")).toBe(false);
   });
 });

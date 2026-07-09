@@ -77,6 +77,9 @@ export function ChatView(): React.ReactElement {
         });
         setDraft("");
         setScrollback(0);
+        // Return focus to the thread list so global shortcuts (1-4, q, o…)
+        // work again; a focused TextField would swallow them as text.
+        setFocus("threads");
       } catch (error) {
         showToast((error as Error).message, "error");
       }

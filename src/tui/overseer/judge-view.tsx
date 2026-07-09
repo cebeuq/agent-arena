@@ -57,6 +57,8 @@ export function JudgeView(): React.ReactElement {
               }
             }
           );
+        } else {
+          showToast("Cancelled — claim still pending.", "info");
         }
       });
   }

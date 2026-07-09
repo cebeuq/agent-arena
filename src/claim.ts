@@ -323,6 +323,7 @@ export async function claimRun(options: ClaimRunOptions): Promise<ClaimRecord> {
         verifiedAt,
         elapsedMs: elapsedMs(state, verifiedAtDate)
       };
+      ignoreRemainingPendingClaims(state, verifiedAt);
       await refreshAllMirrors(state);
       await writeFinalReport(state, claim);
       await stopOtherAgentPanes(state, options.agentId);
@@ -332,6 +333,21 @@ export async function claimRun(options: ClaimRunOptions): Promise<ClaimRecord> {
     await writeRunState(state);
     return claim;
   });
+}
+
+// A finished run can never judge its remaining pending claims, so mark them
+// terminal — otherwise the overseer keeps a stale "press 4 to judge" banner
+// and (N!) badge forever.
+function ignoreRemainingPendingClaims(state: RunState, resolvedAt: string): void {
+  for (const claim of state.claims) {
+    if (claim.status === "pending") {
+      claim.status = "ignored";
+      claim.verifiedAt = resolvedAt;
+      claim.note = claim.note
+        ? `${claim.note} (run finished before this claim was judged)`
+        : "Run finished before this claim was judged.";
+    }
+  }
 }
 
 export async function rejectManualClaim(options: RejectClaimOptions): Promise<ClaimRecord> {
@@ -417,6 +433,7 @@ export async function acceptManualClaim(options: AcceptClaimOptions): Promise<Cl
       elapsedMs: elapsedMs(state, acceptedAtDate)
     };
 
+    ignoreRemainingPendingClaims(state, acceptedAt);
     await refreshAllMirrors(state);
     await updateCompetitionArtifacts(state);
     await writeFinalReport(state, claim);

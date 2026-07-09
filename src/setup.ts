@@ -137,13 +137,30 @@ function tmuxSessionExists(sessionName: string): boolean {
   return result.status === 0;
 }
 
-async function waitForSetupHelper(repoRoot: string, sessionName: string): Promise<void> {
+function tmuxPaneExists(sessionName: string, paneId: string): boolean {
+  const result = spawnSync("tmux", ["list-panes", "-t", sessionName, "-F", "#{pane_id}"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  if (result.status !== 0) {
+    return false;
+  }
+  return result.stdout.split("\n").some((line) => line.trim() === paneId);
+}
+
+async function waitForSetupHelper(repoRoot: string, sessionName: string, helperPane?: string): Promise<void> {
   const deadline = Date.now() + 1000 * 60 * 60;
   while (Date.now() < deadline) {
     if (await setupDraftIsValid(repoRoot)) {
       return;
     }
     if (!tmuxSessionExists(sessionName)) {
+      return;
+    }
+    // The draft-watch pane keeps the session alive even after the helper CLI
+    // exits; without this check a helper that quit without writing a draft
+    // would leave us (and the user) waiting on "Waiting for helper output...".
+    if (helperPane && !tmuxPaneExists(sessionName, helperPane)) {
       return;
     }
     await sleep(1000);
@@ -691,7 +708,11 @@ export async function writeSetupCompletionTool(repoRoot: string, sessionName: st
   return completePath;
 }
 
-export async function writeSetupAutoExitWatcher(repoRoot: string, sessionName: string): Promise<string> {
+export async function writeSetupAutoExitWatcher(
+  repoRoot: string,
+  sessionName: string,
+  helperPane?: string
+): Promise<string> {
   const watcherPath = setupAutoExitPath(repoRoot);
   const draftPath = setupDraftPath(repoRoot);
   const script = [
@@ -699,6 +720,7 @@ export async function writeSetupAutoExitWatcher(repoRoot: string, sessionName: s
     "set -eu",
     `DRAFT=${shellQuote(draftPath)}`,
     `SESSION=${shellQuote(sessionName)}`,
+    `PANE=${shellQuote(helperPane ?? "")}`,
     `NODE=${shellQuote(process.execPath)}`,
     "",
     "while :; do",
@@ -713,6 +735,16 @@ export async function writeSetupAutoExitWatcher(repoRoot: string, sessionName: s
     "      tmux kill-session -t \"$SESSION\" >/dev/null 2>&1 || true",
     "    fi",
     "    exit 0",
+    "  fi",
+    "",
+    "  # The draft-watch pane keeps the session alive after the helper CLI",
+    "  # exits; if the helper pane is gone and no draft was written, collapse",
+    "  # the session instead of leaving 'Waiting for helper output...' forever.",
+    "  if [ -n \"$PANE\" ] && command -v tmux >/dev/null 2>&1; then",
+    "    if ! tmux list-panes -t \"$SESSION\" -F '#{pane_id}' 2>/dev/null | grep -qxF \"$PANE\"; then",
+    "      tmux kill-session -t \"$SESSION\" >/dev/null 2>&1 || true",
+    "      exit 0",
+    "    fi",
     "  fi",
     "",
     "  sleep 1",
@@ -895,9 +927,9 @@ export async function importSetupDraft(
 
   const agents = sourceDraft.agents.map((agent) => {
     const exactInstructions = setupDraft.agentInstructions[agent.id];
-    const presetInstructions = setupDraft.agentInstructions[agent.preset];
+    const presetInstructions = agent.preset ? setupDraft.agentInstructions[agent.preset] : undefined;
     const exactResources = setupDraft.agentResources[agent.id];
-    const presetResources = setupDraft.agentResources[agent.preset];
+    const presetResources = agent.preset ? setupDraft.agentResources[agent.preset] : undefined;
 
     return {
       ...agent,
@@ -934,7 +966,6 @@ export async function launchSetupHelper(options: {
 
   const sessionName = `agent-arena-setup-${Date.now().toString(36)}`;
   const completionToolPath = await writeSetupCompletionTool(options.repoRoot, sessionName);
-  const autoExitPath = await writeSetupAutoExitWatcher(options.repoRoot, sessionName);
   const before = captureProjectSignature(options.repoRoot);
   const prompt = buildSetupPrompt(
     options.repoRoot,
@@ -977,6 +1008,8 @@ export async function launchSetupHelper(options: {
     encoding: "utf8"
   });
 
+  // Written after the helper pane exists so the watcher can detect its death.
+  const autoExitPath = await writeSetupAutoExitWatcher(options.repoRoot, sessionName, helperPane);
   const autoExit = spawn("sh", [autoExitPath], {
     detached: true,
     stdio: "ignore"
@@ -991,7 +1024,7 @@ export async function launchSetupHelper(options: {
     };
   }
   if (attached.launchedExternal || attached.openedInTmux) {
-    await waitForSetupHelper(options.repoRoot, sessionName);
+    await waitForSetupHelper(options.repoRoot, sessionName, helperPane);
   }
 
   const blockedChanges = projectChangesSince(options.repoRoot, before);
@@ -1011,9 +1044,14 @@ export async function launchSetupHelper(options: {
       warnings: imported.warnings
     };
   } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
     return {
       ok: false,
-      warnings: [`Setup helper did not produce a valid draft: ${(error as Error).message}`]
+      warnings: [
+        code === "ENOENT"
+          ? "The setup helper ended without saving a draft. Rerun it or fill in the task manually."
+          : `Setup helper did not produce a valid draft: ${(error as Error).message}`
+      ]
     };
   }
 }

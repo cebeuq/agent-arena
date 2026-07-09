@@ -127,14 +127,16 @@ export async function runArenaTui(options: TuiOptions): Promise<void> {
       existingConfig: reloaded.existingConfig,
       configError: reloaded.existingConfigError,
       draft: result.draft ?? request.draft,
-      stack: result.ok
-        ? [{ name: "project" }, { name: "teams" }, { name: "task" }, { name: "review" }]
-        : [{ name: "project" }, { name: "teams" }, { name: "task" }],
+      // Always resume at Review: it's where the helper was launched from, and
+      // it is the screen that renders `notices` — a failure message would be
+      // invisible on the Task screen.
+      stack: [{ name: "project" }, { name: "teams" }, { name: "task" }, { name: "review" }],
       notices: [
         ...result.warnings,
         ...(result.blockedChanges ? [`Helper changed project files outside allowed outputs:\n${result.blockedChanges}`] : [])
       ],
-      projectCandidates: []
+      projectCandidates: [],
+      helperRan: true
     };
   }
 }

@@ -1,6 +1,6 @@
 import React, { createContext, useMemo, useRef } from "react";
 import { useInput, type Key } from "ink";
-import { parseMouseInput } from "../mouse/parse.js";
+import { isMouseOnlyInput } from "../mouse/parse.js";
 
 export type KeyHandler = (input: string, key: Key) => boolean | void;
 
@@ -32,7 +32,9 @@ export function KeyProvider({ children }: { children: React.ReactNode }): React.
   );
 
   useInput((input, key) => {
-    if (parseMouseInput(input)) {
+    // Chunks made up entirely of mouse sequences (one or more — fast clicks
+    // batch press+release into a single read) belong to MouseProvider.
+    if (isMouseOnlyInput(input)) {
       return;
     }
 

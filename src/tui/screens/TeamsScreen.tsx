@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Box, Text } from "ink";
 import {
   addAgentDraft,
@@ -27,12 +27,19 @@ export function TeamsScreen(): React.ReactElement {
   const { rows } = useTerminalSize();
   const draft = state.draft;
   const items = useMemo(() => buildTeamsItems(draft), [draft]);
-  const [selected, setSelected] = useState<string | undefined>(items.find((item) => item.value.startsWith("agent:"))?.value);
+  // Selection lives in wizard state (not useState) so it survives this screen
+  // unmounting while the agent editor is open — otherwise Esc-ing back would
+  // land on the first agent and a quick `d` would delete the wrong row.
+  const selected = state.teamsSelection ?? items.find((item) => item.value.startsWith("agent:"))?.value;
+  const setSelected = (value: string | undefined): void => {
+    dispatch({ type: "setTeamsSelection", value });
+  };
 
   useEffect(() => {
     if (!selected || !items.some((item) => item.value === selected)) {
       setSelected(items.find((item) => item.value.startsWith("agent:"))?.value ?? items[0]?.value);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, selected]);
 
   const selectedRef = selected ? parseTeamsRowValue(selected) : undefined;
@@ -99,6 +106,9 @@ export function TeamsScreen(): React.ReactElement {
         .then((confirmed) => {
           if (confirmed) {
             setDraft(removeAgentDraft(draft, selectedRef.agentId));
+            showToast(`Removed ${selectedRef.agentId}.`, "info");
+          } else {
+            showToast("Cancelled — nothing removed.", "info");
           }
         });
       return;
@@ -118,6 +128,9 @@ export function TeamsScreen(): React.ReactElement {
       .then((confirmed) => {
         if (confirmed) {
           setDraft(removeTeamDraft(draft, selectedRef.teamId));
+          showToast(`Removed team ${selectedRef.teamId}.`, "info");
+        } else {
+          showToast("Cancelled — nothing removed.", "info");
         }
       });
   }
@@ -180,6 +193,9 @@ export function TeamsScreen(): React.ReactElement {
           .then((confirmed) => {
             if (confirmed) {
               setDraft(removeTeamDraft(draft, teamId));
+              showToast(`Removed ${team.name}.`, "info");
+            } else {
+              showToast("Cancelled — nothing removed.", "info");
             }
           });
       }

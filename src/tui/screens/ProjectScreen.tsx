@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { existsSync } from "node:fs";
 import { Box, Text } from "ink";
 import { createNewProject } from "../../setup.js";
 import { resolveGitRoot } from "../../worktree.js";
@@ -86,7 +87,10 @@ export function ProjectScreen(): React.ReactElement {
         showToast(`Loaded ${resolvedRoot}`, "info");
       }
     } catch {
-      showToast("That path is not inside a git repository.", "error");
+      showToast(
+        existsSync(candidate) ? "That path is not inside a git repository." : "That path does not exist.",
+        "error"
+      );
     } finally {
       dispatch({ type: "setBusy", busy: undefined });
     }
@@ -139,7 +143,24 @@ export function ProjectScreen(): React.ReactElement {
       void openTextPrompt(modal, {
         title: "Project path",
         label: "Absolute path, relative path, or . for the current directory.",
-        placeholder: "/path/to/repo"
+        placeholder: "/path/to/repo",
+        // Inline validation keeps the prompt (and the typed path) open on a
+        // bad entry instead of discarding it behind a toast.
+        validate: (value) => {
+          const candidate = value.trim();
+          if (!candidate) {
+            return undefined;
+          }
+          if (!existsSync(candidate)) {
+            return "Path does not exist.";
+          }
+          try {
+            resolveGitRoot(candidate);
+            return undefined;
+          } catch {
+            return "Not a git repository.";
+          }
+        }
       }).then((entered) => {
         if (entered?.trim()) {
           void selectProject(entered.trim());

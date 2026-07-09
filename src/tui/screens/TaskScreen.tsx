@@ -25,6 +25,9 @@ export function TaskScreen(): React.ReactElement {
   const draft = state.draft;
   const [fieldIndex, setFieldIndex] = useState(0);
   const [editing, setEditing] = useState<"goal" | "verifier" | undefined>();
+  // Local buffer for inline edits: committed to the draft only on Enter, so
+  // Esc actually cancels instead of silently keeping every keystroke.
+  const [editBuffer, setEditBuffer] = useState("");
 
   const helper = useMemo(() => selectSetupHelper(selectedAgentPresets(draft)), [draft.agents]);
 
@@ -67,6 +70,7 @@ export function TaskScreen(): React.ReactElement {
     if (field === "helper") {
       launchHelper();
     } else if (field === "goal") {
+      setEditBuffer(draft.goal);
       setEditing("goal");
     } else if (field === "doneWhen") {
       openDoneWhenEditor();
@@ -77,6 +81,7 @@ export function TaskScreen(): React.ReactElement {
         showToast("Switch judging to Verifier to set a verifier command.", "warn");
         return;
       }
+      setEditBuffer(draft.judging.verifyCommand);
       setEditing("verifier");
     } else if (field === "sharedResources") {
       dispatch({ type: "push", route: { name: "resources", scope: { kind: "shared" } } });
@@ -157,9 +162,12 @@ export function TaskScreen(): React.ReactElement {
         <FieldRow label="Goal" required selected={selectedField === "goal"}>
           {editing === "goal" ? (
             <TextField
-              value={draft.goal}
-              onChange={(goal) => setDraft({ ...draft, goal })}
-              onSubmit={() => setEditing(undefined)}
+              value={editBuffer}
+              onChange={setEditBuffer}
+              onSubmit={(goal) => {
+                setDraft({ ...draft, goal });
+                setEditing(undefined);
+              }}
               onCancel={() => setEditing(undefined)}
               width={60}
               placeholder="What should the competing agents accomplish?"
@@ -194,9 +202,12 @@ export function TaskScreen(): React.ReactElement {
         >
           {editing === "verifier" && draft.judging.mode === "verifier" ? (
             <TextField
-              value={draft.judging.verifyCommand}
-              onChange={(verifyCommand) => setDraft({ ...draft, judging: { mode: "verifier", verifyCommand } })}
-              onSubmit={() => setEditing(undefined)}
+              value={editBuffer}
+              onChange={setEditBuffer}
+              onSubmit={(verifyCommand) => {
+                setDraft({ ...draft, judging: { mode: "verifier", verifyCommand } });
+                setEditing(undefined);
+              }}
               onCancel={() => setEditing(undefined)}
               width={50}
               placeholder="npm test"

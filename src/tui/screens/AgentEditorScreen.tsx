@@ -72,14 +72,43 @@ export function AgentEditorScreen({ agentId }: { agentId: string }): React.React
     if (field === "harness") {
       void openSelectPrompt(modal, {
         title: "Harness",
-        items: builtInAgentIds.map((preset) => ({ value: preset, label: agentPresets[preset].displayName })),
-        selected: agent.preset
-      }).then((preset) => {
-        if (preset) {
-          setAgent((current) => ({ ...current, preset: preset as AgentPresetId, model: undefined }));
+        items: [
+          ...builtInAgentIds.map((preset) => ({ value: preset as string, label: agentPresets[preset].displayName })),
+          { value: "__custom__", label: "Custom command…" }
+        ],
+        selected: agent.preset ?? "__custom__"
+      }).then((choice) => {
+        if (!choice) {
+          return;
         }
+        if (choice === "__custom__") {
+          void openTextPrompt(modal, {
+            title: "Custom harness command",
+            label: "Shell command run in the agent's workspace pane. Placeholders like {goalFile} are supported (see README Command Templates).",
+            initial: agent.command ?? "",
+            width: 70,
+            validate: (value) => (value.trim() ? undefined : "Command cannot be empty.")
+          }).then((command) => {
+            if (command?.trim()) {
+              setAgent((current) => ({
+                ...current,
+                preset: undefined,
+                command: command.trim(),
+                // Preset-specific settings do not apply to a raw command.
+                model: undefined,
+                thinkingLevel: "auto"
+              }));
+            }
+          });
+          return;
+        }
+        setAgent((current) => ({ ...current, preset: choice as AgentPresetId, command: undefined, model: undefined }));
       });
     } else if (field === "model") {
+      if (!agent.preset) {
+        showToast("Custom-command agents configure their model inside the command itself.", "info");
+        return;
+      }
       void openSelectPrompt(modal, {
         title: "Model",
         items: agentModelChoices(agent.preset).map((choice) => ({ value: choice.value, label: choice.label })),
@@ -103,6 +132,10 @@ export function AgentEditorScreen({ agentId }: { agentId: string }): React.React
         setAgent((current) => ({ ...current, model: model === "__default__" ? undefined : model }));
       });
     } else if (field === "thinking") {
+      if (!agent.preset) {
+        showToast("Custom-command agents configure thinking inside the command itself.", "info");
+        return;
+      }
       void openSelectPrompt(modal, {
         title: "Thinking level",
         items: thinkingChoices(agent.preset).map((choice) => ({ value: choice.value, label: choice.label })),
@@ -165,9 +198,11 @@ export function AgentEditorScreen({ agentId }: { agentId: string }): React.React
   }
 
   const values: Record<FieldId, string> = {
-    harness: agentPresets[agent.preset].displayName,
-    model: agent.model ?? "CLI default",
-    thinking: agent.thinkingLevel,
+    harness: agent.preset
+      ? agentPresets[agent.preset].displayName
+      : `Custom: ${agent.command ?? "(no command set)"}`,
+    model: agent.preset ? (agent.model ?? "CLI default") : "set by the custom command",
+    thinking: agent.preset ? agent.thinkingLevel : "set by the custom command",
     codename: agent.codename ?? "(auto-assigned)",
     team: team ? `${team.name} (${team.id})` : agent.teamId,
     captain: isCaptain ? "yes — submits the final claim" : "no — press Enter to make captain",

@@ -94,7 +94,7 @@ function pad(value: string, width: number): string {
 
 function agentRowLabel(draft: TuiDraft, team: TuiTeamDraft, agent: TuiAgentDraft): string {
   const captainMark = team.captainAgentId === agent.id ? glyphs.captain : " ";
-  const harness = agentPresets[agent.preset].displayName;
+  const harness = agent.preset ? agentPresets[agent.preset].displayName : "Custom command";
   const model = agent.model ?? "CLI default";
   const codename = agent.codename ? `"${agent.codename}"` : "";
   return [

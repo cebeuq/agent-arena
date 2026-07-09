@@ -10,6 +10,10 @@ export type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  // Which button starts focused. Defaults to "cancel" for danger dialogs and
+  // "confirm" otherwise; set explicitly to decouple focus from styling
+  // (e.g. a non-danger but irreversible action that should default safe).
+  defaultButton?: "confirm" | "cancel";
 };
 
 export type ConfirmDialogProps = ConfirmOptions & {
@@ -22,9 +26,10 @@ export function ConfirmDialog({
   confirmLabel = "OK",
   cancelLabel = "Cancel",
   danger = false,
+  defaultButton,
   onResult
 }: ConfirmDialogProps): React.ReactElement {
-  const [selected, setSelected] = useState<"confirm" | "cancel">(danger ? "cancel" : "confirm");
+  const [selected, setSelected] = useState<"confirm" | "cancel">(defaultButton ?? (danger ? "cancel" : "confirm"));
 
   useKeys(
     (input, key) => {
@@ -79,7 +84,9 @@ export function ConfirmDialog({
           </Text>
         </Clickable>
       </Box>
-      <Text color={theme.dim}>Enter confirm · Esc cancel · ←/→ switch</Text>
+      <Text color={theme.dim}>
+        Enter = {selected === "confirm" ? confirmLabel : cancelLabel} · Esc cancel · ←/→ switch
+      </Text>
     </Box>
   );
 }

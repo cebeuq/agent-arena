@@ -156,6 +156,13 @@ async function cleanSingleRun(entry: LocalRunState, options: CleanRunOptions): P
     await stopRun({ runId: state.runId, statePath: entry.statePath });
     state = await readRunState(entry.statePath);
     messages.push(`Stopped running run ${state.runId}.`);
+  } else {
+    // A finished run's tmux session (and any -view- sessions) may still be
+    // alive; cleaning should not leave orphaned sessions behind.
+    killTmuxViewSessions(state.tmux.sessionName);
+    if (killTmuxSession(state.tmux.sessionName)) {
+      messages.push(`Killed leftover tmux session ${state.tmux.sessionName}.`);
+    }
   }
 
   const repoRoot = state.baseRepo;

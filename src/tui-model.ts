@@ -26,7 +26,10 @@ export type TuiAgentDraft = {
   id: string;
   name?: string;
   codename?: string;
-  preset: AgentPresetId;
+  // Exactly one of preset/command identifies the harness: a built-in preset
+  // or a raw shell command (custom harness).
+  preset?: AgentPresetId;
+  command?: string;
   teamId: string;
   goalMode: GoalMode;
   model?: string;
@@ -52,9 +55,9 @@ export type TuiDraft = {
   judging: JudgingConfig;
 };
 
-export function makeAgentId(teamId: string, preset: AgentPresetId, existing: Iterable<string> = []): string {
+export function makeAgentId(teamId: string, preset: AgentPresetId | undefined, existing: Iterable<string> = []): string {
   const used = new Set(existing);
-  const base = `${teamId}-${preset}`;
+  const base = `${teamId}-${preset ?? "custom"}`;
   if (!used.has(base)) {
     return base;
   }
@@ -99,7 +102,8 @@ export function teamAccentColor(team: Pick<TuiTeamDraft, "id" | "name">): string
 }
 
 export type AddAgentDraftOptions = {
-  preset: AgentPresetId;
+  preset?: AgentPresetId;
+  command?: string;
   model?: string;
   thinkingLevel?: AgentThinkingLevel;
   codename?: string;
@@ -119,6 +123,7 @@ export function addAgentDraft(
         {
           id,
           preset: options.preset,
+          command: options.command,
           teamId,
           goalMode: "auto",
           model: options.model,
@@ -307,7 +312,10 @@ export function draftFromConfig(config?: ArenaConfig): TuiDraft {
       : fallback.teams;
 
   const agents: TuiAgentDraft[] = config.agents.flatMap((agent) => {
-    if (!agent.preset || !builtInAgentIds.includes(agent.preset)) {
+    const preset = agent.preset && builtInAgentIds.includes(agent.preset) ? agent.preset : undefined;
+    // Custom-command agents are first-class; only drop agents with neither a
+    // known preset nor a command (nothing could launch them).
+    if (!preset && !agent.command) {
       return [];
     }
     return [
@@ -315,7 +323,8 @@ export function draftFromConfig(config?: ArenaConfig): TuiDraft {
         id: agent.id,
         name: agent.name,
         codename: agent.codename,
-        preset: agent.preset,
+        preset,
+        command: agent.command,
         teamId: teamIdForAgent(config.teams, agent.id) ?? teams[0]?.id ?? "red",
         goalMode: agent.goalMode,
         model: agent.model,
@@ -338,7 +347,7 @@ export function draftFromConfig(config?: ArenaConfig): TuiDraft {
 }
 
 export function selectedAgentPresets(draft: TuiDraft): AgentPresetId[] {
-  return [...new Set(draft.agents.map((agent) => agent.preset))];
+  return [...new Set(draft.agents.flatMap((agent) => (agent.preset ? [agent.preset] : [])))];
 }
 
 function teamAgentIds(draft: TuiDraft, teamId: string): string[] {
@@ -359,6 +368,7 @@ export function configFromDraft(draft: TuiDraft): ArenaConfig {
     name: agent.name,
     codename: agent.codename,
     preset: agent.preset,
+    command: agent.command,
     goalMode: agent.goalMode,
     model: agent.model,
     thinkingLevel: agent.thinkingLevel,
@@ -475,7 +485,7 @@ export function teamSummaryLines(config: ArenaConfig): string[] {
           return agentId;
         }
         const label = agent.codename ?? agent.name ?? agent.id;
-        return `${label} (${agent.id}, ${agent.preset})${agent.id === team.captainAgentId ? " captain" : ""}`;
+        return `${label} (${agent.id}, ${agent.preset ?? "custom"})${agent.id === team.captainAgentId ? " captain" : ""}`;
       })
       .join(", ");
     return [`- ${team.name} (${team.id})`, `  captain: ${team.captainAgentId}`, `  agents: ${members || "none"}`];
@@ -528,7 +538,7 @@ export function reviewText(config: ArenaConfig, warnings: string[], context: Res
     "Harness settings:",
     ...config.agents.map(
       (agent) =>
-        `- ${agent.codename ? `${agent.codename} ` : ""}${agent.id}: ${agent.preset}, model ${
+        `- ${agent.codename ? `${agent.codename} ` : ""}${agent.id}: ${agent.preset ?? "custom"}, model ${
           agent.model ?? "default"
         }, thinking ${agent.thinkingLevel ?? "auto"}`
     ),

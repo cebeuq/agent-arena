@@ -10,6 +10,9 @@ export type WizardInit = {
   stack?: Route[];
   notices?: string[];
   projectCandidates?: string[];
+  // True once a setup-helper session has been launched for this draft, so
+  // Review can distinguish "run helper" from "send feedback to a prior run".
+  helperRan?: boolean;
 };
 
 export type WizardBusy = {
@@ -26,6 +29,10 @@ export type WizardState = {
   projectCandidates: string[];
   dirty: boolean;
   busy?: WizardBusy;
+  // Teams-table row selection, kept in wizard state so it survives the
+  // Teams screen unmounting while a sub-screen (agent editor) is open.
+  teamsSelection?: string;
+  helperRan: boolean;
 };
 
 export type WizardAction =
@@ -35,7 +42,8 @@ export type WizardAction =
   | { type: "setDraft"; draft: TuiDraft }
   | { type: "projectLoaded"; repoRoot: string; config?: ArenaConfig; error?: string; draft?: TuiDraft }
   | { type: "setNotices"; notices: string[] }
-  | { type: "setBusy"; busy?: WizardBusy };
+  | { type: "setBusy"; busy?: WizardBusy }
+  | { type: "setTeamsSelection"; value?: string };
 
 export function initialWizardState(init: WizardInit): WizardState {
   return {
@@ -47,7 +55,8 @@ export function initialWizardState(init: WizardInit): WizardState {
     notices: init.notices ?? [],
     projectCandidates: init.projectCandidates ?? [],
     dirty: Boolean(init.draft),
-    busy: undefined
+    busy: undefined,
+    helperRan: init.helperRan ?? false
   };
 }
 
@@ -78,6 +87,8 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       return { ...state, notices: action.notices };
     case "setBusy":
       return { ...state, busy: action.busy };
+    case "setTeamsSelection":
+      return { ...state, teamsSelection: action.value };
     default:
       return state;
   }

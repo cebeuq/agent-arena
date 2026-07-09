@@ -72,7 +72,9 @@ export function ProposalsView(): React.ReactElement {
       .confirm({
         title: "Apply proposal",
         message: `Apply "${record.title}" to ${record.captainAgentId}'s workspace? This modifies the captain worktree with git apply --3way.`,
-        confirmLabel: "Apply"
+        confirmLabel: "Apply",
+        // Modifies the captain's worktree; default to the safe side.
+        defaultButton: "cancel"
       })
       .then((confirmed) => {
         if (confirmed) {

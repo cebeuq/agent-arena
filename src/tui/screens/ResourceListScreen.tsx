@@ -95,6 +95,9 @@ export function ResourceListScreen({ scope }: { scope: ResourceScope }): React.R
             type: "setDraft",
             draft: withScopedResources(draft, scope, resources.filter((_candidate, i) => i !== index))
           });
+          showToast(`Removed ${resource.name || "resource"}.`, "info");
+        } else {
+          showToast("Cancelled — nothing removed.", "info");
         }
       });
   }
