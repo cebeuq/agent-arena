@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   collectAgentProgress,
+  collectAgentProgressAsync,
   notifyRivalsOfClaim,
   sendPeriodicCompetitionNotices,
   updateCompetitionArtifacts
@@ -152,5 +153,25 @@ describe("competition director", () => {
     const progress = collectAgentProgress(state);
 
     expect(progress.find((item) => item.agentId === "a")?.changedFiles).toEqual(["src/a.ts"]);
+  });
+
+  it("keeps the first changed file intact when the first status line starts with a space", async () => {
+    // A modified-but-unstaged file renders as " M path" in `git status --short`.
+    // A whole-output trim used to strip that leading space, making the parser
+    // eat the first character of the first path ("package.json" -> "ackage.json").
+    const state = await makeState();
+    const workspace = state.agents[0].workspace;
+    const git = (...args: string[]) => spawnSync("git", args, { cwd: workspace, stdio: "ignore" });
+    git("config", "user.email", "arena@test.local");
+    git("config", "user.name", "Arena Test");
+    git("add", "src");
+    git("commit", "-m", "seed");
+    await fs.writeFile(path.join(workspace, "src", "a.ts"), "export const a = false;\n", "utf8");
+
+    const sync = collectAgentProgress(state);
+    const live = await collectAgentProgressAsync(state);
+
+    expect(sync.find((item) => item.agentId === "a")?.changedFiles).toEqual(["src/a.ts"]);
+    expect(live.find((item) => item.agentId === "a")?.changedFiles).toEqual(["src/a.ts"]);
   });
 });

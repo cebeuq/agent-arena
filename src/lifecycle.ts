@@ -20,7 +20,7 @@ export type RunSummary = {
   goal: string;
   agentCount: number;
   winnerAgentId?: string;
-  harvested: boolean;
+  harvest?: "merged" | "branch-only";
   statePath: string;
 };
 
@@ -35,7 +35,7 @@ export async function listRuns(cwd = process.cwd()): Promise<RunSummary[]> {
       goal: state.goal,
       agentCount: state.agents.length,
       winnerAgentId: state.winner?.agentId,
-      harvested: Boolean(state.harvest),
+      harvest: state.harvest ? (state.harvest.merged ? "merged" : "branch-only") : undefined,
       statePath
     }));
 }
@@ -48,7 +48,9 @@ export function formatRunsTable(runs: RunSummary[]): string {
     const goal = run.goal.replaceAll(/\s+/g, " ").trim();
     const shortGoal = goal.length > 48 ? `${goal.slice(0, 45)}...` : goal;
     const outcome = run.winnerAgentId
-      ? `winner: ${run.winnerAgentId}${run.harvested ? " (harvested)" : ""}`
+      ? `winner: ${run.winnerAgentId}${
+          run.harvest === "merged" ? " (harvested)" : run.harvest === "branch-only" ? " (harvested, not merged)" : ""
+        }`
       : "";
     return [
       run.runId.padEnd(26),
@@ -174,7 +176,7 @@ async function cleanSingleRun(entry: LocalRunState, options: CleanRunOptions): P
     if (options.deleteBranches) {
       const isWinnerBranch = state.winner?.agentId === agent.id;
       if (isWinnerBranch && !state.harvest?.merged) {
-        messages.push(`Kept winner branch ${agent.branch} (not harvested yet).`);
+        messages.push(`Kept winner branch ${agent.branch} (not merged into the base repo yet).`);
         continue;
       }
       const deleted = runGit(repoRoot, ["branch", "-D", agent.branch]);

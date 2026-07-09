@@ -38,7 +38,10 @@ export function commandExists(binary: string): boolean {
   return result.status === 0;
 }
 
-export function runChecked(command: string, args: string[], cwd?: string): string {
+// Preserves leading whitespace: output like `git status --short` starts with a
+// meaningful status column (" M path"), and trimming the blob would corrupt the
+// first line. Callers strip trailing whitespace themselves when needed.
+export function runCheckedRaw(command: string, args: string[], cwd?: string): string {
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8"
@@ -50,7 +53,11 @@ export function runChecked(command: string, args: string[], cwd?: string): strin
     );
   }
 
-  return result.stdout.trim();
+  return result.stdout;
+}
+
+export function runChecked(command: string, args: string[], cwd?: string): string {
+  return runCheckedRaw(command, args, cwd).trim();
 }
 
 export async function runShell(command: string, cwd: string, env?: Record<string, string>): Promise<ShellResult> {

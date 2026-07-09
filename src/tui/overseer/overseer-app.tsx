@@ -37,6 +37,7 @@ export type OverseerContextValue = {
   openChat: (threadId?: string) => void;
   openJudge: (agentId?: string) => void;
   openAgentPane: (agentId: string) => void;
+  offerHarvest: (winnerAgentId: string) => void;
   chatThreadId?: string;
   judgeAgentId?: string;
 };
@@ -99,6 +100,9 @@ function OverseerRoot({
   const [chatThreadId, setChatThreadId] = useState<string | undefined>();
   const [judgeAgentId, setJudgeAgentId] = useState<string | undefined>();
   const [announcedFinish, setAnnouncedFinish] = useState(initialSnapshot.state.status === "finished");
+  // Last failed harvest attempt, kept until a harvest succeeds so the WINNER
+  // banner can explain the failure durably (a toast alone fades in 2.5s).
+  const [harvestError, setHarvestError] = useState<string | undefined>();
 
   useEffect(() => watcher.subscribe(setSnapshot), [watcher]);
 
@@ -135,6 +139,39 @@ function OverseerRoot({
     } finally {
       setBusy(undefined);
     }
+  }
+
+  // Central harvest entry point (judge accept flow and the `h` retry key both
+  // land here) so failures are captured into harvestError, not just a toast.
+  function offerHarvest(winnerAgentId: string): void {
+    void modal
+      .confirm({
+        title: "Harvest the winner's work?",
+        message: `Commits ${winnerAgentId}'s work to its arena branch and merges it into the checked-out branch of the base repo. You can also do this later with: arena harvest --run ${snapshot.state.runId}`,
+        confirmLabel: "Harvest & merge",
+        cancelLabel: "Later"
+      })
+      .then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+        void (async () => {
+          // The run is already finished by the accept, so harvesting must be
+          // allowed to run on a finished run (hence not runAction's guard).
+          setBusy("Harvesting winner's work…");
+          try {
+            const result = await actions.harvestWinner();
+            setHarvestError(undefined);
+            showToast(result.messages[result.messages.length - 1] ?? "Harvested.", "info");
+          } catch (error) {
+            const reason = (error as Error).message;
+            setHarvestError(reason);
+            showToast(`Harvest failed: ${reason}`, "error");
+          } finally {
+            setBusy(undefined);
+          }
+        })();
+      });
   }
 
   function openAgentPane(agentId: string): void {
@@ -252,6 +289,10 @@ function OverseerRoot({
         restartDaemonAction();
         return true;
       }
+      if (input === "h" && snapshot.state.status === "finished" && snapshot.state.winner && !snapshot.state.harvest) {
+        offerHarvest(snapshot.state.winner.agentId);
+        return true;
+      }
       if (input === "q" || (key.ctrl && input === "c")) {
         exit();
         return true;
@@ -291,6 +332,7 @@ function OverseerRoot({
         setView("judge");
       },
       openAgentPane,
+      offerHarvest,
       chatThreadId,
       judgeAgentId
     }),
@@ -311,6 +353,17 @@ function OverseerRoot({
     hint("r", "Refresh", { onPress: () => void watcher.refreshNow() }),
     ...(!snapshot.daemonAlive && !readOnly
       ? [hint("R", "Restart daemon", { onPress: restartDaemonAction })]
+      : []),
+    ...(snapshot.state.status === "finished" && snapshot.state.winner && !snapshot.state.harvest
+      ? [
+          hint("h", "Harvest", {
+            onPress: () => {
+              if (snapshot.state.winner) {
+                offerHarvest(snapshot.state.winner.agentId);
+              }
+            }
+          })
+        ]
       : []),
     hint("q", "Quit (run continues)", { onPress: () => exit() })
   ];
@@ -365,7 +418,9 @@ function OverseerRoot({
                 ? snapshot.state.harvest.merged
                   ? `harvested into ${snapshot.state.harvest.targetBranch}`
                   : `harvested to branch ${snapshot.state.harvest.branch} (not merged)`
-                : `not harvested; run: arena harvest --run ${snapshot.state.runId}`}
+                : harvestError
+                  ? `harvest FAILED: ${harvestError} — press h to retry`
+                  : `not harvested — press h (or: arena harvest --run ${snapshot.state.runId})`}
             </Text>
           </Box>
         ) : pending.length > 0 ? (

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { runChecked } from "./shell.js";
+import { runCheckedRaw } from "./shell.js";
 import { sendTmuxPaneText } from "./tmux.js";
 import type { RunAgent, RunState } from "./types.js";
 
@@ -67,7 +67,9 @@ function isArenaInternal(relPath: string): boolean {
 
 function workspaceGitOutput(agent: RunAgent, args: string[]): string {
   try {
-    return runChecked("git", ["-C", agent.workspace, ...args]);
+    // Raw variant: a blob-trim would strip the first status line's leading
+    // space and corrupt the first changed-file path (see cleanStatusPath).
+    return runCheckedRaw("git", ["-C", agent.workspace, ...args]);
   } catch {
     return "";
   }
@@ -86,7 +88,9 @@ function parseAgentProgress(state: RunState, agent: RunAgent, statusOutput: stri
     agentId: agent.id,
     name: `${agent.codename ?? agent.name} (${agent.id})`,
     changedFiles,
-    diffStat,
+    // Trailing-only trim: `git diff --stat` lines begin with a space that
+    // keeps the column alignment, so a full trim would misalign the first row.
+    diffStat: diffStat.replace(/\s+$/u, ""),
     claimCount: state.claims.filter((claim) => claim.agentId === agent.id).length,
     latestClaimStatus: latestClaim?.status,
     latestClaimAt: latestClaim?.verifiedAt ?? latestClaim?.claimedAt
@@ -112,7 +116,10 @@ async function workspaceGitOutputAsync(agent: RunAgent, args: string[]): Promise
       encoding: "utf8",
       maxBuffer: 1024 * 1024 * 8
     });
-    return result.stdout.trim();
+    // Do NOT trim the blob: `git status --short` lines start with a meaningful
+    // status column (e.g. " M path"), and a whole-output trim would strip the
+    // first line's leading space, making cleanStatusPath eat a path character.
+    return result.stdout;
   } catch {
     return "";
   }

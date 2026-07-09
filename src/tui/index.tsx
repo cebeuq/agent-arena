@@ -39,6 +39,43 @@ async function runWizardOnce(init: WizardInit): Promise<ExitRequest> {
   return exitRequest;
 }
 
+// Skips the write when the on-disk config is semantically identical, so
+// starting a run never dirties a committed arena.config.json (a dirty base
+// repo would later block `arena harvest`'s merge). Deep-equal, not byte-equal:
+// hand-written or helper-written files may differ in key order or formatting.
+export async function writeConfigIfChanged(configPath: string, config: unknown): Promise<void> {
+  const serialized = `${JSON.stringify(config, null, 2)}\n`;
+  try {
+    const existing = await fs.readFile(configPath, "utf8");
+    if (deepJsonEqual(JSON.parse(existing), JSON.parse(serialized))) {
+      return;
+    }
+  } catch {
+    // Missing or unparseable file: fall through and write.
+  }
+  await fs.writeFile(configPath, serialized, "utf8");
+}
+
+function deepJsonEqual(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => deepJsonEqual(item, right[index]));
+  }
+  if (left && right && typeof left === "object" && typeof right === "object" && !Array.isArray(left) && !Array.isArray(right)) {
+    const leftKeys = Object.keys(left as Record<string, unknown>);
+    const rightKeys = Object.keys(right as Record<string, unknown>);
+    return (
+      leftKeys.length === rightKeys.length &&
+      leftKeys.every((key) =>
+        deepJsonEqual((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key])
+      )
+    );
+  }
+  return false;
+}
+
 export async function runArenaTui(options: TuiOptions): Promise<void> {
   const cwd = options.cwd ?? process.cwd();
   let repoRoot: string | undefined;
@@ -65,7 +102,7 @@ export async function runArenaTui(options: TuiOptions): Promise<void> {
 
     if (request.kind === "start") {
       const configPath = path.join(request.repoRoot, "arena.config.json");
-      await fs.writeFile(configPath, `${JSON.stringify(request.config, null, 2)}\n`, "utf8");
+      await writeConfigIfChanged(configPath, request.config);
       await runLaunchAndOverseer({
         configPath,
         cliPath: options.cliPath

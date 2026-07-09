@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { notifyRivalsOfClaim, updateCompetitionArtifacts } from "./competition.js";
 import { refreshAllMirrors } from "./mirror.js";
 import { readRunState, resolveStatePath, withRunLock, writeRunState } from "./run-state.js";
-import { runChecked, runShell } from "./shell.js";
+import { runCheckedRaw, runShell } from "./shell.js";
 import { sendTmuxPaneCtrlC, sendTmuxPaneText } from "./tmux.js";
 import type { ClaimRecord, RunAgent, RunState, ShellResult } from "./types.js";
 
@@ -49,8 +49,10 @@ async function stopOtherAgentPanes(state: RunState, winnerAgentId: string): Prom
 
 function gitSummary(workspace: string): string {
   try {
-    const status = runChecked("git", ["-C", workspace, "status", "--short"]);
-    const diffStat = runChecked("git", ["-C", workspace, "diff", "--stat"]);
+    // Trailing-only trims: leading spaces are part of git's status/diffstat
+    // column alignment; a full trim corrupts the first line.
+    const status = runCheckedRaw("git", ["-C", workspace, "status", "--short"]).replace(/\s+$/u, "");
+    const diffStat = runCheckedRaw("git", ["-C", workspace, "diff", "--stat"]).replace(/\s+$/u, "");
     return [`### ${workspace}`, "", "Status:", "```", status || "(clean)", "```", "", "Diff stat:", "```", diffStat || "(no unstaged diff)", "```", ""].join("\n");
   } catch (error) {
     return `### ${workspace}\n\nCould not read git summary: ${(error as Error).message}\n`;

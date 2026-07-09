@@ -12,7 +12,7 @@ import { askedForMoreAt, pendingClaims } from "./model.js";
 import { useOverseer } from "./overseer-app.js";
 
 export function JudgeView(): React.ReactElement {
-  const { snapshot, actions, readOnly, runAction, judgeAgentId, showToast } = useOverseer();
+  const { snapshot, actions, readOnly, runAction, judgeAgentId, showToast, offerHarvest } = useOverseer();
   const modal = useModal();
   const { rows } = useTerminalSize();
   const pending = useMemo(() => pendingClaims(snapshot), [snapshot]);
@@ -36,29 +36,6 @@ export function JudgeView(): React.ReactElement {
   const askedAt = claim ? askedForMoreAt(snapshot, claim) : undefined;
 
   const verdictHistory = snapshot.state.claims.filter((candidate) => candidate.status !== "pending");
-
-  function offerHarvest(winnerAgentId: string): void {
-    void modal
-      .confirm({
-        title: "Harvest the winner's work?",
-        message: `Commits ${winnerAgentId}'s work to its arena branch and merges it into the checked-out branch of the base repo. You can also do this later with: arena harvest --run ${snapshot.state.runId}`,
-        confirmLabel: "Harvest & merge",
-        cancelLabel: "Later"
-      })
-      .then((confirmed) => {
-        if (confirmed) {
-          // The run is already finished by the accept, so harvesting must be
-          // allowed to run on a finished run.
-          void runAction("Harvesting winner's work…", () => actions.harvestWinner(), {
-            allowWhenFinished: true
-          }).then((result) => {
-            if (result) {
-              showToast(result.messages[result.messages.length - 1] ?? "Harvested.", "info");
-            }
-          });
-        }
-      });
-  }
 
   function acceptSelected(target: ClaimRecord): void {
     const rivals = snapshot.state.agents.filter((candidate) => candidate.id !== target.agentId).length;
