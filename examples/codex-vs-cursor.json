@@ -1,16 +1,32 @@
 {
   "baseRepo": ".",
   "baseRef": "HEAD",
-  "goal": "Implement the requested feature and pass the verifier before the rival agent.",
-  "verifyCommand": "npm test",
+  "goal": "Implement the requested feature and submit the strongest finish claim before the rival agent.",
+  "successCriteria": [
+    "The requested feature is complete.",
+    "Existing tests pass."
+  ],
+  "constraints": [
+    "Keep changes scoped to the requested feature."
+  ],
+  "resources": [],
+  "judging": {
+    "mode": "manual",
+    "claimantBehavior": "wait",
+    "notifyRivals": true
+  },
   "agents": [
     {
       "id": "codex",
-      "preset": "codex"
+      "preset": "codex",
+      "goalMode": "auto",
+      "resources": []
     },
     {
       "id": "cursor",
-      "preset": "cursor"
+      "preset": "cursor",
+      "goalMode": "auto",
+      "resources": []
     }
   ],
   "peek": {

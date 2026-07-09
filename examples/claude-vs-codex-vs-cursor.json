@@ -1,0 +1,46 @@
+{
+  "baseRepo": ".",
+  "baseRef": "HEAD",
+  "goal": "Implement the requested feature and submit the strongest finish claim.",
+  "successCriteria": [
+    "The requested feature is complete.",
+    "Existing tests pass.",
+    "The implementation is easy to review."
+  ],
+  "constraints": [
+    "Keep changes scoped to the requested feature."
+  ],
+  "resources": [],
+  "judging": {
+    "mode": "manual",
+    "claimantBehavior": "wait",
+    "notifyRivals": true
+  },
+  "agents": [
+    {
+      "id": "claude",
+      "preset": "claude",
+      "goalMode": "auto",
+      "resources": []
+    },
+    {
+      "id": "codex",
+      "preset": "codex",
+      "goalMode": "auto",
+      "resources": []
+    },
+    {
+      "id": "cursor",
+      "preset": "cursor",
+      "goalMode": "auto",
+      "resources": []
+    }
+  ],
+  "peek": {
+    "refreshIntervalSeconds": 30
+  },
+  "tmux": {
+    "sessionPrefix": "agent-arena",
+    "attach": true
+  }
+}

@@ -116,10 +116,17 @@ export async function refreshMirror(source: string, dest: string, excludes: stri
 
 export async function refreshAllMirrors(state: RunState): Promise<void> {
   for (const agent of state.agents) {
-    const rival = state.agents.find((candidate) => candidate.id !== agent.id);
-    if (!rival) {
-      continue;
+    for (const rival of state.agents) {
+      if (rival.id === agent.id) {
+        continue;
+      }
+
+      const rivalDir = agent.rivalDirs[rival.id];
+      if (!rivalDir) {
+        continue;
+      }
+
+      await refreshMirror(rival.workspace, rivalDir, state.peek.exclude);
     }
-    await refreshMirror(rival.workspace, agent.rivalDir, state.peek.exclude);
   }
 }

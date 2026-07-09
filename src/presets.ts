@@ -5,7 +5,9 @@ export const agentPresets: Record<AgentPresetId, AgentPreset> = {
     id: "claude",
     displayName: "Claude Code",
     binary: "claude",
-    defaultCommand: "claude 'Read .arena/brief.md and complete the Agent Arena task.'",
+    promptCommand: "claude {promptDirective}",
+    goalCommand: "claude {goalDirective}",
+    goalMinimumVersion: "2.1.139",
     installHint: "Install Claude Code from Anthropic, then authenticate with the claude CLI.",
     authHint: "Run `claude` once in a normal terminal and complete authentication.",
     docsUrl: "https://code.claude.com/docs"
@@ -14,7 +16,9 @@ export const agentPresets: Record<AgentPresetId, AgentPreset> = {
     id: "codex",
     displayName: "OpenAI Codex CLI",
     binary: "codex",
-    defaultCommand: "codex 'Read .arena/brief.md and complete the Agent Arena task.'",
+    promptCommand: "codex {promptDirective}",
+    goalCommand: "codex -c features.goals=true {goalDirective}",
+    goalMinimumVersion: "0.133.0",
     installHint: "Install with `npm install -g @openai/codex` or your preferred Codex installer.",
     authHint: "Run `codex` once in a normal terminal and complete authentication.",
     docsUrl: "https://github.com/openai/codex"
@@ -23,7 +27,13 @@ export const agentPresets: Record<AgentPresetId, AgentPreset> = {
     id: "cursor",
     displayName: "Cursor Agent CLI",
     binary: "cursor-agent",
-    defaultCommand: "cursor-agent -p 'Read .arena/brief.md and complete the Agent Arena task.'",
+    // Interactive (not -p print mode) so the pane stays open for chat nudges
+    // and pressure notices; --force so shell commands run without approval
+    // prompts stalling the race. No --trust: it is headless-only and errors
+    // in interactive mode; the workspace trust dialog is what the trust
+    // warmup phase is for, and trust persists per directory once accepted.
+    promptCommand: "cursor-agent --force {promptDirective}",
+    goalUnsupportedReason: "Cursor Agent CLI does not document a /goal command; using prompt mode.",
     installHint: "Install Cursor Agent CLI from Cursor, then authenticate it locally.",
     authHint: "Run `cursor-agent` once in a normal terminal and complete authentication.",
     docsUrl: "https://docs.cursor.com/en/cli/overview"
@@ -43,7 +53,7 @@ export function resolveAgentCommand(agent: AgentInput): string {
     throw new Error(`Agent ${agent.id} must define either preset or command.`);
   }
 
-  return getPreset(agent.preset).defaultCommand;
+  return getPreset(agent.preset).promptCommand;
 }
 
 export function resolveAgentBinary(agent: AgentInput): string | undefined {

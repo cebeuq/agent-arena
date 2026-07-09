@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_EXCLUDES } from "../src/defaults.js";
-import { isExcluded, refreshMirror } from "../src/mirror.js";
+import { isExcluded, refreshAllMirrors, refreshMirror } from "../src/mirror.js";
+import { makeRunState } from "./helpers/state.js";
 
 let tempDirs: string[] = [];
 
@@ -64,5 +65,28 @@ describe("rival mirrors", () => {
     const dirMode = (await fs.stat(dest)).mode & 0o777;
     expect(fileMode & 0o222).toBe(0);
     expect(dirMode & 0o222).toBe(0);
+  });
+
+  it("mirrors rivals for every agent", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "agent-arena-mirror-on-"));
+    tempDirs.push(root);
+
+    const state = makeRunState(root);
+    for (const agent of state.agents) {
+      await fs.mkdir(agent.workspace, { recursive: true });
+      await fs.writeFile(path.join(agent.workspace, "work.txt"), `${agent.id}\n`);
+      agent.rivalDirs = Object.fromEntries(
+        state.agents
+          .filter((candidate) => candidate.id !== agent.id)
+          .map((candidate) => [candidate.id, path.join(agent.rivalsDir, candidate.id)])
+      );
+    }
+
+    await refreshAllMirrors(state);
+
+    const [first, second] = state.agents;
+    await expect(
+      fs.readFile(path.join(first.rivalDirs[second.id], "work.txt"), "utf8")
+    ).resolves.toContain(second.id);
   });
 });

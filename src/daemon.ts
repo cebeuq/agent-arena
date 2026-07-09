@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { sendPendingChatReminders } from "./chat.js";
+import { sendPeriodicCompetitionNotices, updateCompetitionArtifacts } from "./competition.js";
 import { refreshAllMirrors } from "./mirror.js";
-import { readRunState, resolveStatePath } from "./run-state.js";
+import { readRunState, resolveStatePath, withRunLock, writeRunState } from "./run-state.js";
 import { shellQuote } from "./shell.js";
 
 function sleep(ms: number): Promise<void> {
@@ -26,13 +28,23 @@ export async function runMirrorDaemon(runId: string, explicitStatePath?: string)
   const statePath = await resolveStatePath(runId, explicitStatePath);
 
   while (true) {
-    const state = await readRunState(statePath);
-    await refreshAllMirrors(state);
+    const tick = await withRunLock(statePath, async () => {
+      const state = await readRunState(statePath);
+      await refreshAllMirrors(state);
+      await updateCompetitionArtifacts(state);
+      sendPeriodicCompetitionNotices(state);
+      await sendPendingChatReminders(state);
+      await writeRunState(state);
+      return {
+        status: state.status,
+        refreshIntervalSeconds: state.peek.refreshIntervalSeconds
+      };
+    });
 
-    if (state.status !== "running") {
+    if (tick.status !== "running") {
       return;
     }
 
-    await sleep(state.peek.refreshIntervalSeconds * 1000);
+    await sleep(tick.refreshIntervalSeconds * 1000);
   }
 }
