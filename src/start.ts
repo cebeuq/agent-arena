@@ -1,4 +1,6 @@
 import fs from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { writeAgentBrief } from "./brief.js";
@@ -11,8 +13,9 @@ import { formatPreflightIssues, preflightAgents } from "./preflight.js";
 import { readSecretsEnv, resourceBlockingErrors, resourceOrderWarnings, resourceWarnings } from "./resources.js";
 import { registerRun, writeRunState } from "./run-state.js";
 import { commandExists, shellQuote } from "./shell.js";
-import { attachTmux, launchTmux, runTrustWarmup } from "./tmux.js";
+import { attachTmux, killTmuxSession, killTmuxViewSessions, launchTmux, runTrustWarmup } from "./tmux.js";
 import type { TerminalAttachMode } from "./terminal.js";
+import { preTrustWorkspaces, type TrustSeedResult } from "./trust.js";
 import type { AgentInput, RunAgent, RunState, RunTeam, TeamInput } from "./types.js";
 import { createWorktree, resolveGitRef, resolveGitRoot } from "./worktree.js";
 import { spawnMirrorDaemon } from "./daemon.js";
@@ -36,13 +39,49 @@ export type StartEvent =
 
 export type StartReporter = (event: StartEvent) => void;
 
+
+// Best-effort teardown for a launch that failed partway: without this, a crash
+// after worktree creation leaves orphaned worktrees, branches, and tmux
+// sessions that `arena clean` cannot see (the run was never registered).
+function cleanupFailedStart(
+  repoRoot: string,
+  layouts: Array<{ workspace: string; branch: string }>,
+  runDir: string,
+  sessionName: string
+): void {
+  killTmuxViewSessions(sessionName);
+  killTmuxSession(`${sessionName}-trust`);
+  killTmuxSession(sessionName);
+  for (const layout of layouts) {
+    spawnSync("chmod", ["-R", "u+w", layout.workspace], { stdio: "ignore" });
+    const removed = spawnSync("git", ["-C", repoRoot, "worktree", "remove", "--force", layout.workspace], {
+      stdio: "ignore"
+    });
+    if (removed.status !== 0) {
+      try {
+        rmSync(layout.workspace, { recursive: true, force: true });
+      } catch {
+        // Leave it for a manual clean.
+      }
+    }
+    spawnSync("git", ["-C", repoRoot, "branch", "-D", layout.branch], { stdio: "ignore" });
+  }
+  spawnSync("git", ["-C", repoRoot, "worktree", "prune"], { stdio: "ignore" });
+  try {
+    rmSync(runDir, { recursive: true, force: true });
+  } catch {
+    // Leave it for a manual clean.
+  }
+}
+
 export type StartOptions = {
   configPath: string;
   attach?: boolean;
   terminal?: TerminalAttachMode;
   cliPath: string;
   reporter?: StartReporter;
-  runWarmup?: (state: RunState) => Promise<void>;
+  runWarmup?: (state: RunState, agentIds?: string[]) => Promise<void>;
+  preTrust?: (state: RunState) => Promise<TrustSeedResult[]>;
   attachWhenDone?: boolean;
 };
 
@@ -302,6 +341,7 @@ export async function startArena(options: StartOptions): Promise<RunState> {
 
   const runAgents: RunAgent[] = [];
 
+  try {
   report({ type: "stage", stage: "worktrees", status: "start" });
   for (const [index, layout] of layouts.entries()) {
     report({
@@ -401,16 +441,48 @@ export async function startArena(options: StartOptions): Promise<RunState> {
     claims: []
   };
 
-  if (state.tmux.attach) {
-    report({
-      type: "stage",
-      stage: "warmup",
-      status: "start",
-      detail: "complete trust/auth prompts in the warmup window, then exit each agent CLI"
-    });
-    report({ type: "info", message: "Opening agent trust/auth warmup session before the race..." });
-    await (options.runWarmup ?? ((warmupState: RunState) => runTrustWarmup(warmupState, options.terminal ?? "auto")))(state);
-    report({ type: "stage", stage: "warmup", status: "done" });
+  {
+    // Seed each CLI's trust store for the fresh worktrees so no pane greets
+    // the race with a "do you trust this folder?" dialog. The interactive
+    // warmup session only opens for agents that could not be pre-trusted.
+    report({ type: "stage", stage: "warmup", status: "start", detail: "pre-trusting agent workspaces" });
+    const seedResults = await (options.preTrust ?? preTrustWorkspaces)(state);
+    for (const result of seedResults) {
+      report({
+        type: "info",
+        message: `trust ${result.agentId}: ${result.seeded ? "ok" : "NEEDS PROMPT"} — ${result.detail}`
+      });
+    }
+    const unseeded = seedResults.filter((result) => !result.seeded).map((result) => result.agentId);
+    if (unseeded.length === 0) {
+      report({
+        type: "stage",
+        stage: "warmup",
+        status: "done",
+        detail: seedResults.length > 0 ? "workspaces pre-trusted; no prompts expected" : "no preset agents"
+      });
+    } else if (state.tmux.attach) {
+      report({
+        type: "stage",
+        stage: "warmup",
+        status: "start",
+        detail: `complete trust/auth prompts for ${unseeded.join(", ")}, then exit each agent CLI`
+      });
+      report({ type: "info", message: "Opening agent trust/auth warmup session before the race..." });
+      await (options.runWarmup ??
+        ((warmupState: RunState, ids?: string[]) => runTrustWarmup(warmupState, options.terminal ?? "auto", undefined, ids)))(
+        state,
+        unseeded
+      );
+      report({ type: "stage", stage: "warmup", status: "done" });
+    } else {
+      report({
+        type: "stage",
+        stage: "warmup",
+        status: "done",
+        detail: `could not pre-trust ${unseeded.join(", ")}; trust prompts may appear in the race panes`
+      });
+    }
   }
 
   report({ type: "stage", stage: "briefs", status: "start" });
@@ -459,4 +531,9 @@ export async function startArena(options: StartOptions): Promise<RunState> {
   }
 
   return state;
+  } catch (error) {
+    report({ type: "warning", message: "Start failed; cleaning up partial run state (worktrees, branches, tmux)..." });
+    cleanupFailedStart(repoRoot, layouts, runDir, sessionName);
+    throw error;
+  }
 }

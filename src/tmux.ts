@@ -196,13 +196,28 @@ function trustWarmupCommand(agent: RunAgent): string {
   ].join(" ");
 }
 
-export async function runTrustWarmup(state: RunState, mode: TerminalAttachMode = "auto", tmux: TmuxRunner = runTmux): Promise<void> {
-  const agents = state.agents.filter((agent) => agent.binary && agent.preset);
+export async function runTrustWarmup(
+  state: RunState,
+  mode: TerminalAttachMode = "auto",
+  tmux: TmuxRunner = runTmux,
+  agentIds?: string[]
+): Promise<void> {
+  const agents = state.agents.filter(
+    (agent) => agent.binary && agent.preset && (!agentIds || agentIds.includes(agent.id))
+  );
   if (agents.length === 0) {
     return;
   }
 
   const sessionName = `${state.tmux.sessionName}-trust`;
+  // A previous attempt (e.g. an external attach that failed over SSH) may have
+  // left the session behind; creating over it would fail with
+  // "duplicate session". Recreate from scratch.
+  try {
+    tmux(["kill-session", "-t", sessionName]);
+  } catch {
+    // No leftover session.
+  }
   let first = true;
   let anchor = "";
   for (const agent of agents) {
@@ -231,6 +246,13 @@ export async function runTrustWarmup(state: RunState, mode: TerminalAttachMode =
 
   const attached = attachTmux(sessionName, mode);
   if (!attached.attached && !attached.launchedExternal && !attached.openedInTmux) {
+    // Don't leave the freshly created session behind: the caller may retry
+    // with a different attach mode.
+    try {
+      tmux(["kill-session", "-t", sessionName]);
+    } catch {
+      // Best effort.
+    }
     throw new Error(`Could not open trust warmup session.\n${attached.warnings.join("\n")}`);
   }
   if (attached.launchedExternal || attached.openedInTmux) {

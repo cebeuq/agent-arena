@@ -40,6 +40,7 @@ describe("terminal attach adapter", () => {
   it("builds deterministic external attach commands for macOS and Linux", () => {
     const mac = externalAttachCommands("arena run", {
       platform: "darwin",
+      env: {},
       commandExists: (binary) => binary === "osascript"
     });
     expect(mac).toHaveLength(2);
@@ -48,12 +49,22 @@ describe("terminal attach adapter", () => {
 
     const linux = externalAttachCommands("arena", {
       platform: "linux",
+      env: {},
       commandExists: (binary) => binary === "kitty" || binary === "wezterm"
     });
     expect(linux).toEqual([
       "kitty sh -lc 'tmux attach-session -t arena'",
       "wezterm start -- sh -lc 'tmux attach-session -t arena'"
     ]);
+  });
+
+  it("suppresses external terminals over SSH (they would open on the remote display)", () => {
+    const commands = externalAttachCommands("arena", {
+      platform: "darwin",
+      env: { SSH_CONNECTION: "10.0.0.1 1 10.0.0.2 22" },
+      commandExists: () => true
+    });
+    expect(commands).toEqual([]);
   });
 
   it("attaches directly when the current terminal is compatible", () => {

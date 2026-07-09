@@ -54,6 +54,64 @@ describe.runIf(hasTmuxAndGit)("startArena staged reporter", () => {
     }
   });
 
+  it("runs the interactive warmup only for agents that could not be pre-trusted", async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "arena-start-warmup-"));
+    process.env.AGENT_ARENA_HOME = tempDir;
+    cleanups.push(() => {
+      delete process.env.AGENT_ARENA_HOME;
+    });
+    execFileSync("git", ["init"], { cwd: tempDir, stdio: "ignore" });
+    await fs.writeFile(path.join(tempDir, "README.md"), "fixture\n", "utf8");
+    execFileSync("git", ["add", "."], { cwd: tempDir, stdio: "ignore" });
+    execFileSync(
+      "git",
+      ["-c", "user.name=T", "-c", "user.email=t@example.invalid", "commit", "-m", "init"],
+      { cwd: tempDir, stdio: "ignore" }
+    );
+    const configPath = path.join(tempDir, "arena.config.json");
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baseRepo: ".",
+        goal: "Test run.",
+        agents: [
+          { id: "a", command: "sleep 600" },
+          { id: "b", command: "sleep 600" }
+        ],
+        tmux: { sessionPrefix: "arena-warmup-test", attach: true }
+      }),
+      "utf8"
+    );
+
+    const warmupCalls: Array<string[] | undefined> = [];
+    const state: RunState = await startArena({
+      configPath,
+      attach: true,
+      cliPath: path.resolve("dist/cli.js"),
+      reporter: () => {},
+      preTrust: async (trustState) => [
+        { agentId: "a", preset: "claude", workspace: trustState.agents[0].workspace, seeded: true, detail: "ok" },
+        { agentId: "b", preset: "cursor", workspace: trustState.agents[1].workspace, seeded: false, detail: "no marker" }
+      ],
+      runWarmup: async (_warmupState, agentIds) => {
+        warmupCalls.push(agentIds);
+      },
+      attachWhenDone: false
+    });
+    cleanups.push(() => {
+      spawnSync("tmux", ["kill-session", "-t", state.tmux.sessionName], { stdio: "ignore" });
+      if (state.mirrorDaemonPid) {
+        try {
+          process.kill(state.mirrorDaemonPid);
+        } catch {
+          // already gone
+        }
+      }
+    });
+
+    expect(warmupCalls).toEqual([["b"]]);
+  });
+
   it("emits ordered stage events, calls the warmup hook, and skips attach when told", async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "arena-start-"));
     process.env.AGENT_ARENA_HOME = tempDir; // keep the run index out of ~/.agent-arena
@@ -124,7 +182,9 @@ describe.runIf(hasTmuxAndGit)("startArena staged reporter", () => {
       "daemon"
     ]);
 
-    expect(warmups).toEqual([state.runId]);
+    // Custom-command agents have no CLI trust store, so the interactive
+    // warmup hook is skipped entirely now that workspaces are pre-trusted.
+    expect(warmups).toEqual([]);
 
     const infoLines = events.flatMap((event) => (event.type === "info" ? [event.message] : []));
     expect(infoLines.some((line) => line.startsWith("Started Agent Arena run "))).toBe(true);

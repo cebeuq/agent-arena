@@ -158,7 +158,7 @@ export async function runLaunchAndOverseer(options: LaunchAndOverseerOptions): P
         cliPath: options.cliPath,
         reporter: (event) => bus.push(event),
         attachWhenDone: false,
-        runWarmup: async (warmupState) => {
+        runWarmup: async (warmupState, agentIds) => {
           // Trust warmup needs a real terminal. Try an external window first so
           // the progress screen stays visible; otherwise suspend Ink and use
           // this terminal, then restore the progress screen.
@@ -169,7 +169,7 @@ export async function runLaunchAndOverseer(options: LaunchAndOverseerOptions): P
             spawnSync("tmux", ["kill-session", "-t", trustSession], { stdio: "ignore" });
           };
           try {
-            await runTrustWarmup(warmupState, "external");
+            await runTrustWarmup(warmupState, "external", undefined, agentIds);
             return;
           } catch {
             // Fall back to taking over this terminal.
@@ -179,7 +179,7 @@ export async function runLaunchAndOverseer(options: LaunchAndOverseerOptions): P
           instance?.unmount();
           leaveTuiScreen();
           try {
-            await runTrustWarmup(warmupState, "current");
+            await runTrustWarmup(warmupState, "current", undefined, agentIds);
           } finally {
             enterTuiScreen();
             mountLaunch();

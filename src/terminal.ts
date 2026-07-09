@@ -118,6 +118,13 @@ function linuxExternalCommands(command: string, runtime: TerminalRuntime): strin
 export function externalAttachCommands(sessionName: string, runtime: TerminalRuntime = {}): string[] {
   const command = tmuxAttachCommand(sessionName);
   const platform = runtime.platform ?? process.platform;
+  const env = runtime.env ?? process.env;
+  // Over SSH a GUI terminal would open on the remote machine's physical
+  // display, invisible to the user — treat external launch as unavailable so
+  // callers fall back to attaching in the current terminal.
+  if (env.SSH_TTY || env.SSH_CONNECTION) {
+    return [];
+  }
   if (platform === "darwin" && exists("osascript", runtime)) {
     return macExternalCommands(command);
   }
