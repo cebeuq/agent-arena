@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { envFromResources, readSecretsEnv } from "./resources.js";
 import { shellQuote } from "./shell.js";
 import { attachTmuxSession, tmuxAttachCommand, type AttachResult, type TerminalAttachMode } from "./terminal.js";
-import type { RunAgent, RunState, RunTeam } from "./types.js";
+import type { AgentPresetId, RunAgent, RunState, RunTeam } from "./types.js";
 
 export type TmuxRunner = (args: string[]) => string;
 
@@ -127,6 +127,19 @@ export function killTmuxViewSessions(sessionName: string): number {
 
 export type OpenAgentPaneResult = AttachResult & { error?: string };
 
+// Human-readable label for the surrounding tmux's prefix key (e.g. "C-b"), so
+// the viewer's status line can tell the user which keys close/detach it. When
+// the overseer runs inside the user's tmux, a viewer opened as a split obeys
+// that outer prefix. Defaults to C-b (tmux's default) if it can't be read.
+function currentTmuxPrefixLabel(tmux: TmuxRunner = runTmux): string {
+  try {
+    const prefix = tmux(["display-message", "-p", "#{prefix}"]).trim();
+    return prefix.length > 0 ? prefix : "C-b";
+  } catch {
+    return "C-b";
+  }
+}
+
 // Open one agent's pane in an external terminal. Uses a grouped tmux session
 // (shared windows, independent current window) so several agents can be viewed
 // side by side without fighting over the main session's active window.
@@ -152,6 +165,18 @@ export function openAgentPaneExternal(state: RunState, agentId: string): OpenAge
   try {
     if (!tmuxSessionExists(viewSession)) {
       runTmux(["new-session", "-d", "-t", state.tmux.sessionName, "-s", viewSession]);
+      // The viewer's own status line is the one durable place to explain how
+      // to leave: when opened as a split inside the user's tmux, the outer
+      // prefix swallows single C-b, so the inner detach needs a doubled
+      // prefix (and prefix+x on the outer tmux kills the split outright).
+      const prefix = currentTmuxPrefixLabel();
+      runTmux([
+        "set-option",
+        "-t",
+        viewSession,
+        "status-right",
+        ` view only — close: ${prefix} x · detach: ${prefix} ${prefix} d `
+      ]);
     }
     runTmux(["select-window", "-t", `${viewSession}:${windowName}`]);
     if (agent.paneId) {
@@ -369,7 +394,37 @@ export function notifyTmux(sessionName: string, message: string): void {
   }
 }
 
-export function sendTmuxPaneText(paneId: string | undefined, message: string): void {
+// The key that submits (or, while the agent is mid-turn, queues as a steering
+// follow-up) text in each harness's interactive composer. Determined
+// empirically: Codex ignores Enter for a queued message and needs Tab (Enter
+// can even interrupt its /goal run); Claude Code and Cursor both submit/queue
+// on Enter. Custom/unknown harnesses default to Enter.
+export function steerSubmitKey(preset: AgentPresetId | undefined): "Enter" | "Tab" {
+  return preset === "codex" ? "Tab" : "Enter";
+}
+
+// Milliseconds to wait after pasting before pressing the submit key. Without
+// it the submit key races the bracketed paste and is absorbed as a newline, so
+// notifications pile up unsent in the composer (the original notification bug).
+function steerSettleMs(): number {
+  const raw = Number.parseInt(process.env.AGENT_ARENA_STEER_SETTLE_MS ?? "", 10);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 800;
+}
+
+// Synchronous sleep: these senders run in short-lived CLI/daemon invocations,
+// not the overseer UI, so a brief block is fine and keeps the call sites sync.
+function sleepSyncMs(ms: number): void {
+  if (ms <= 0) {
+    return;
+  }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function sendTmuxPaneText(
+  paneId: string | undefined,
+  message: string,
+  preset?: AgentPresetId
+): void {
   if (!paneId) {
     return;
   }
@@ -395,10 +450,14 @@ export function sendTmuxPaneText(paneId: string | undefined, message: string): v
     }
   }
 
-  const enter = spawnSync("tmux", ["send-keys", "-t", paneId, "Enter"], {
+  // Let the paste settle before submitting so the key isn't swallowed by
+  // bracketed-paste handling.
+  sleepSyncMs(steerSettleMs());
+
+  const submit = spawnSync("tmux", ["send-keys", "-t", paneId, steerSubmitKey(preset)], {
     encoding: "utf8"
   });
-  if (enter.status !== 0) {
+  if (submit.status !== 0) {
     return;
   }
 }

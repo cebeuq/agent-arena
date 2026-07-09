@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { formatElapsed, pluralize } from "./format.js";
 import { runCheckedRaw } from "./shell.js";
 import { sendTmuxPaneText } from "./tmux.js";
-import type { RunAgent, RunState } from "./types.js";
+import type { AgentPresetId, RunAgent, RunState } from "./types.js";
 
 export const NOTICE_INTERVAL_SECONDS = 180;
 
@@ -19,7 +19,7 @@ export type AgentProgress = {
   latestClaimAt?: string;
 };
 
-export type NoticeSender = (paneId: string | undefined, message: string) => void;
+export type NoticeSender = (paneId: string | undefined, message: string, preset?: AgentPresetId) => void;
 
 function nowIso(now: Date): string {
   return now.toISOString();
@@ -280,7 +280,7 @@ export function sendPeriodicCompetitionNotices(
   }
 
   for (const agent of state.agents) {
-    sender(agent.paneId, periodicNotice(state, agent));
+    sender(agent.paneId, periodicNotice(state, agent), agent.preset);
   }
 
   state.competitionStatus = {
@@ -319,7 +319,7 @@ export function notifyRivalsOfClaim(
     const rivalTeamId = rival.teamId ?? rival.id;
     const claimantTeamId = claimant.teamId ?? claimant.id;
     if (rival.id !== claimantId && rivalTeamId !== claimantTeamId) {
-      sender(rival.paneId, claimNotice(claimant, progress));
+      sender(rival.paneId, claimNotice(claimant, progress), rival.preset);
     }
   }
 
@@ -349,7 +349,7 @@ export function sendManualPressureNotice(
     "ARENA PRESSURE: User requested a competition update. Check .arena/scoreboard.md, keep momentum, and claim when ready.";
 
   for (const agent of targets) {
-    sender(agent.paneId, message);
+    sender(agent.paneId, message, agent.preset);
   }
 
   if (targets.length > 0) {

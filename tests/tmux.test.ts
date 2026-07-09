@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { launchTmux } from "../src/tmux.js";
+import { launchTmux, steerSubmitKey } from "../src/tmux.js";
 import type { RunAgent, RunState } from "../src/types.js";
 
 let tempDirs: string[] = [];
@@ -52,6 +52,18 @@ function agent(id: string): RunAgent {
     rivalDirs: {}
   };
 }
+
+describe("steerSubmitKey", () => {
+  it("uses Tab for codex (Enter does not queue a steering follow-up there)", () => {
+    expect(steerSubmitKey("codex")).toBe("Tab");
+  });
+
+  it("uses Enter for Claude, Cursor, and unknown/custom harnesses", () => {
+    expect(steerSubmitKey("claude")).toBe("Enter");
+    expect(steerSubmitKey("cursor")).toBe("Enter");
+    expect(steerSubmitKey(undefined)).toBe("Enter");
+  });
+});
 
 describe("tmux launcher", () => {
   it("creates team windows with agent panes and returns agent pane ids", () => {

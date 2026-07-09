@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sendTmuxPaneText } from "./tmux.js";
-import type { RunAgent, RunState } from "./types.js";
+import type { AgentPresetId, RunAgent, RunState } from "./types.js";
 
 export type ChatScope = "team" | "public" | "dm";
 
@@ -23,7 +23,7 @@ export type ChatMessage = {
 
 type ReadState = Record<string, string[]>;
 type DeliveryState = Record<string, Record<string, { immediateSentAt?: string; reminderSentAt?: string }>>;
-type NoticeSender = (paneId: string | undefined, message: string) => void;
+type NoticeSender = (paneId: string | undefined, message: string, preset?: AgentPresetId) => void;
 
 const REMINDER_DELAY_MS = 2 * 60 * 1000;
 
@@ -314,7 +314,7 @@ export async function sendChatMessage(
       ...delivery[message.id][recipient.id],
       immediateSentAt: now.toISOString()
     };
-    paneSender(recipient.paneId, pendingNotice([message]));
+    paneSender(recipient.paneId, pendingNotice([message]), recipient.preset);
   }
 
   await writeJson(deliveryPath(state), delivery);
@@ -397,7 +397,7 @@ export async function sendPendingChatReminders(
     });
 
     for (const group of groupUnread(unread)) {
-      sender(agent.paneId, pendingNotice(group));
+      sender(agent.paneId, pendingNotice(group), agent.preset);
       sent += 1;
       for (const message of group) {
         delivery[message.id] = delivery[message.id] ?? {};

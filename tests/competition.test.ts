@@ -146,6 +146,19 @@ describe("competition director", () => {
     expect(messages[0].message).toContain(".arena/rivals/a");
   });
 
+  it("passes the recipient's harness preset to the notice sender (for the steer key)", async () => {
+    const state = await makeState();
+    // Rival "b" runs Codex, which needs Tab (not Enter) to queue a steer.
+    state.agents[1].preset = "codex";
+    const sends: Array<{ pane?: string; preset?: string }> = [];
+
+    notifyRivalsOfClaim(state, "a", new Date("2026-06-08T00:05:00.000Z"), (pane, _message, preset) => {
+      sends.push({ pane, preset });
+    });
+
+    expect(sends).toEqual([{ pane: "%b", preset: "codex" }]);
+  });
+
   it("collects changed-file counts while ignoring arena internals", async () => {
     const state = await makeState();
     await fs.writeFile(path.join(state.agents[0].workspace, ".arena", "scoreboard.md"), "ignored\n", "utf8");

@@ -381,7 +381,8 @@ export async function rejectManualClaim(options: RejectClaimOptions): Promise<Cl
 
     sendTmuxPaneText(
       agent.paneId,
-      `ARENA JUDGE: Your finish claim was rejected.${options.note?.trim() ? ` Reason: ${options.note.trim()}.` : ""} Keep working and claim again with ./.arena/claim.sh when ready.`
+      `ARENA JUDGE: Your finish claim was rejected.${options.note?.trim() ? ` Reason: ${options.note.trim()}.` : ""} Keep working and claim again with ./.arena/claim.sh when ready.`,
+      agent.preset
     );
 
     await updateCompetitionArtifacts(state);
