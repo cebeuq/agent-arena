@@ -21,7 +21,35 @@ function stateLabel(state: ReturnType<typeof agentRunState>): string {
   return state;
 }
 
-function buildItems(snapshot: RunSnapshot): Array<SelectListItem<string>> {
+function buildItems(snapshot: RunSnapshot, columns: number): Array<SelectListItem<string>> {
+  // Content-fit columns: fixed widths used to truncate "OpenAI Codex CLI"
+  // regardless of terminal width. Shrinks toward minimums on narrow terminals.
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+  const widths = {
+    name: clamp(
+      Math.max(0, ...snapshot.state.agents.map((agent) => `${agent.codename} (${agent.id})`.length)),
+      18,
+      34
+    ),
+    harness: clamp(
+      Math.max(0, ...snapshot.state.agents.map((agent) => (agent.preset ? agentPresets[agent.preset].displayName : "custom").length)),
+      11,
+      20
+    ),
+    model: clamp(Math.max("default".length, ...snapshot.state.agents.map((agent) => (agent.model ?? "").length)), 9, 20)
+  };
+  // marker(2) + separators(6) + state(9) + files(9) + claims(9) + chrome(~6) + unread slack(10)
+  let excess = widths.name + widths.harness + widths.model + 51 - columns;
+  for (const key of ["name", "model", "harness"] as const) {
+    if (excess <= 0) {
+      break;
+    }
+    const minimum = key === "name" ? 18 : key === "model" ? 9 : 11;
+    const give = Math.min(excess, widths[key] - minimum);
+    widths[key] -= give;
+    excess -= give;
+  }
+
   return runTeamsOf(snapshot.state).flatMap((team) => {
     const members = snapshot.state.agents.filter((agent) => team.agentIds.includes(agent.id));
     return [
@@ -38,9 +66,9 @@ function buildItems(snapshot: RunSnapshot): Array<SelectListItem<string>> {
         return {
           value: `agent:${agent.id}`,
           label: [
-            `${agent.isCaptain ? glyphs.captain : " "} ${pad(`${agent.codename} (${agent.id})`, 26)}`,
-            pad(harness, 13),
-            pad(agent.model ?? "default", 14),
+            `${agent.isCaptain ? glyphs.captain : " "} ${pad(`${agent.codename} (${agent.id})`, widths.name)}`,
+            pad(harness, widths.harness),
+            pad(agent.model ?? "default", widths.model),
             pad(stateLabel(runState), 9),
             pad(`files:${progress?.changedFiles.length ?? 0}`, 9),
             pad(`claims:${progress?.claimCount ?? 0}`, 9),
@@ -56,8 +84,8 @@ function buildItems(snapshot: RunSnapshot): Array<SelectListItem<string>> {
 
 export function DashboardView(): React.ReactElement {
   const { snapshot, openChat, openJudge, openAgentPane, showToast } = useOverseer();
-  const { rows } = useTerminalSize();
-  const items = useMemo(() => buildItems(snapshot), [snapshot]);
+  const { rows, columns } = useTerminalSize();
+  const items = useMemo(() => buildItems(snapshot, columns), [snapshot, columns]);
   const [selected, setSelected] = useState<string | undefined>(
     items.find((item) => !item.header)?.value
   );
@@ -104,6 +132,9 @@ export function DashboardView(): React.ReactElement {
   }
 
   const listHeight = Math.max(4, rows - 16);
+  // On short terminals every extra line pushes the detail panel out of the
+  // clipped viewport, so tighten the chrome instead of dropping the panel.
+  const compact = rows < 28;
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -116,7 +147,7 @@ export function DashboardView(): React.ReactElement {
           height={listHeight}
           onDisabledActivate={(reason) => showToast(reason, "warn")}
         />
-        <Text color={theme.dim}>
+        <Text color={theme.dim} wrap="truncate">
           Enter opens chat with the agent (or judging when it has a pending claim). o opens the agent's terminal
           pane. j judges.
         </Text>
@@ -124,9 +155,11 @@ export function DashboardView(): React.ReactElement {
       <Panel title={selectedAgent ? `${selectedAgent.codename} (${selectedAgent.id})` : "No agent selected"}>
         {selectedAgent ? (
           <Box flexDirection="column">
-            <Text color={theme.dim} wrap="truncate">
-              branch {selectedAgent.branch} · workspace {selectedAgent.workspace}
-            </Text>
+            {compact ? null : (
+              <Text color={theme.dim} wrap="truncate">
+                branch {selectedAgent.branch} · workspace {selectedAgent.workspace}
+              </Text>
+            )}
             <Text wrap="truncate">
               {selectedProgress?.changedFiles.length ?? 0} changed file(s)
               {selectedProgress?.changedFiles.length

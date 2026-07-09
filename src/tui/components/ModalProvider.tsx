@@ -22,6 +22,14 @@ export type ModalApi = {
 
 const ModalContext = createContext<ModalApi | undefined>(undefined);
 
+// True while any modal is open. The footer KeyBar consumes this so it can
+// show the modal's keys instead of the underlying screen's (stale) hints.
+export const ModalOpenContext = createContext<boolean>(false);
+
+export function useModalOpen(): boolean {
+  return useContext(ModalOpenContext);
+}
+
 export function useModal(): ModalApi {
   const api = useContext(ModalContext);
   if (!api) {
@@ -66,6 +74,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
 
   return (
     <ModalContext.Provider value={api}>
+      <ModalOpenContext.Provider value={modals.length > 0}>
       <Box flexDirection="column" minHeight={modals.length > 0 ? rows : undefined}>
         {children}
         {modals.map((modal, index) => {
@@ -91,6 +100,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
           );
         })}
       </Box>
+      </ModalOpenContext.Provider>
     </ModalContext.Provider>
   );
 }

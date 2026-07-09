@@ -13,7 +13,7 @@ import { useOverseer } from "./overseer-app.js";
 
 export function ChatView(): React.ReactElement {
   const { snapshot, actions, readOnly, chatThreadId, showToast } = useOverseer();
-  const { rows } = useTerminalSize();
+  const { rows, columns } = useTerminalSize();
   const threads = useMemo(() => buildThreads(snapshot), [snapshot]);
   const [threadId, setThreadId] = useState<string>(chatThreadId ?? "public");
   const [focus, setFocus] = useState<"threads" | "input">("threads");
@@ -55,12 +55,31 @@ export function ChatView(): React.ReactElement {
   }));
 
   const logHeight = Math.max(4, rows - 15);
-  const maxScrollback = Math.max(0, messages.length - logHeight);
+  const maxScrollback = Math.max(0, messages.length - 1);
   const clampedScrollback = Math.min(scrollback, maxScrollback);
-  const visible = messages.slice(
-    Math.max(0, messages.length - logHeight - clampedScrollback),
-    messages.length - clampedScrollback
-  );
+  // Messages wrap (long agent messages used to be unreadable one-line
+  // truncations), so budget the log by estimated wrapped lines: walk backwards
+  // from the scroll position and take as many newest messages as fit.
+  const logWidth = Math.max(20, Math.floor(columns * 0.7) - 6);
+  const end = messages.length - clampedScrollback;
+  let lineBudget = logHeight;
+  let start = end;
+  while (start > 0) {
+    const candidate = messages[start - 1];
+    const estimated = Math.max(
+      1,
+      Math.ceil((`00:00 ${candidate.fromCodename}: ${candidate.message}`).length / logWidth)
+    );
+    if (estimated > lineBudget && start !== end) {
+      break;
+    }
+    lineBudget -= estimated;
+    start -= 1;
+    if (lineBudget <= 0) {
+      break;
+    }
+  }
+  const visible = messages.slice(start, end);
 
   function sendDraft(text: string): void {
     const body = text.trim();
@@ -108,7 +127,7 @@ export function ChatView(): React.ReactElement {
 
   function renderMessage(messageId: string, from: string, body: string, mine: boolean): React.ReactElement {
     return (
-      <Text key={messageId} wrap="truncate">
+      <Text key={messageId} wrap="wrap">
         <Text color={mine ? theme.active : theme.warning}>{from}</Text>
         <Text>: {body}</Text>
       </Text>

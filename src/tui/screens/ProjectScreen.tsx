@@ -191,7 +191,9 @@ export function ProjectScreen(): React.ReactElement {
         hint("Esc", "Quit", { onPress: () => requestExit({ kind: "quit" }) })
       ]}
     >
-      <Box>
+      {/* flexGrow fills the shell body so the panels reach the footer instead
+          of leaving a large dead zone on tall terminals. */}
+      <Box flexGrow={1}>
         <Box flexDirection="column" width="50%">
           <Panel title="Where will the arena run?" flexGrow={1}>
             <SelectList

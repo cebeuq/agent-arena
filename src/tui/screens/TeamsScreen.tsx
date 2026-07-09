@@ -24,9 +24,9 @@ export function TeamsScreen(): React.ReactElement {
   const { state, dispatch, toast, showToast } = useWizard();
   const modal = useModal();
   const openInEditor = useEditorEscape();
-  const { rows } = useTerminalSize();
+  const { rows, columns } = useTerminalSize();
   const draft = state.draft;
-  const items = useMemo(() => buildTeamsItems(draft), [draft]);
+  const items = useMemo(() => buildTeamsItems(draft, columns), [draft, columns]);
   // Selection lives in wizard state (not useState) so it survives this screen
   // unmounting while the agent editor is open — otherwise Esc-ing back would
   // land on the first agent and a quick `d` would delete the wrong row.

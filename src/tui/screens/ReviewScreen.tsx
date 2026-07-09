@@ -36,7 +36,7 @@ function lineColor(line: ReviewLine): string | undefined {
 export function ReviewScreen(): React.ReactElement {
   const { state, dispatch, toast, showToast, requestExit } = useWizard();
   const modal = useModal();
-  const { rows } = useTerminalSize();
+  const { rows, columns } = useTerminalSize();
   const draft = state.draft;
   const [view, setView] = useState<"contract" | "json">("contract");
   const [scroll, setScroll] = useState(0);
@@ -65,17 +65,41 @@ export function ReviewScreen(): React.ReactElement {
 
   const warnings = useMemo(() => draftWarnings(draft, resourceContext), [draft, resourceContext]);
 
+  // Soft-wrap long contract lines to the panel width before the vertical
+  // slice, so nothing is silently `…`-truncated and paging stays line-based.
+  const contractWidth = Math.max(24, Math.floor(columns * 0.66) - 6);
   const lines = useMemo<ReviewLine[]>(() => {
-    if (!built.config) {
-      return [{ text: built.error ?? "Draft is not valid yet.", tone: "warning" }];
-    }
-    if (view === "json") {
-      return reviewJson(built.config)
-        .split("\n")
-        .map((text) => ({ text }));
-    }
-    return reviewSections(built.config, warnings, resourceContext);
-  }, [built, view, warnings, resourceContext]);
+    const wrap = (line: ReviewLine): ReviewLine[] => {
+      if (line.text.length <= contractWidth) {
+        return [line];
+      }
+      const wrapped: ReviewLine[] = [];
+      const indent = `${line.text.match(/^\s*/)?.[0] ?? ""}  `;
+      let rest = line.text;
+      let first = true;
+      while (rest.length > 0) {
+        const budget = first ? contractWidth : contractWidth - indent.length;
+        if (rest.length <= budget) {
+          wrapped.push({ ...line, text: first ? rest : indent + rest });
+          break;
+        }
+        const slice = rest.slice(0, budget);
+        const breakAt = slice.lastIndexOf(" ") > budget * 0.6 ? slice.lastIndexOf(" ") : budget;
+        wrapped.push({ ...line, text: first ? slice.slice(0, breakAt) : indent + slice.slice(0, breakAt) });
+        rest = rest.slice(breakAt).replace(/^ +/, "");
+        first = false;
+      }
+      return wrapped;
+    };
+    const raw: ReviewLine[] = !built.config
+      ? [{ text: built.error ?? "Draft is not valid yet.", tone: "warning" }]
+      : view === "json"
+        ? reviewJson(built.config)
+            .split("\n")
+            .map((text) => ({ text }))
+        : reviewSections(built.config, warnings, resourceContext);
+    return raw.flatMap(wrap);
+  }, [built, view, warnings, resourceContext, contractWidth]);
 
   const bodyHeight = Math.max(8, rows - 9);
   const maxScroll = Math.max(0, lines.length - bodyHeight);

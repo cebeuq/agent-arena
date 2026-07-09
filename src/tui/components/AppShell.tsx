@@ -2,9 +2,14 @@ import React from "react";
 import { Box, Text } from "ink";
 import { VERSION } from "../../version.js";
 import { theme } from "../theme.js";
-import type { KeyHint } from "../keys/keymap.js";
+import { hint, type KeyHint } from "../keys/keymap.js";
 import { KeyBar } from "./KeyBar.js";
+import { useModalOpen } from "./ModalProvider.js";
 import { useTerminalSize } from "./useTerminalSize.js";
+
+// Shown while a modal owns input — the underlying screen's hints would be
+// stale (its keys are not reachable until the modal closes).
+const MODAL_HINTS: KeyHint[] = [hint("Enter", "Confirm"), hint("Esc", "Cancel"), hint("←/→", "Switch")];
 
 export type AppShellStatus = {
   text: string;
@@ -32,6 +37,7 @@ function statusColor(tone: AppShellStatus["tone"]): string {
 
 export function AppShell({ title, step, hints, status, onDisabledHint, children }: AppShellProps): React.ReactElement {
   const { columns, rows } = useTerminalSize();
+  const modalOpen = useModalOpen();
 
   return (
     <Box flexDirection="column" width={columns} height={rows} overflow="hidden">
@@ -57,7 +63,7 @@ export function AppShell({ title, step, hints, status, onDisabledHint, children 
         {children}
       </Box>
       <Box flexShrink={0} paddingX={1}>
-        <KeyBar hints={hints} onDisabledHint={onDisabledHint} />
+        <KeyBar hints={modalOpen ? MODAL_HINTS : hints} onDisabledHint={onDisabledHint} />
       </Box>
     </Box>
   );

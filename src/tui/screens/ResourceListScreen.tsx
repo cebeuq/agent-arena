@@ -17,7 +17,7 @@ import { SelectList, type SelectListItem } from "../components/SelectList.js";
 import { useModal } from "../components/ModalProvider.js";
 import { openSelectPrompt } from "../components/prompts.js";
 import { useWizard } from "../app.js";
-import type { ResourceScope } from "../routes.js";
+import { stepForRoute, type ResourceScope } from "../routes.js";
 import { RESOURCE_TYPES, scopedResources, scopeTitle, withScopedResources } from "../view-models/resources-vm.js";
 
 export function ResourceListScreen({ scope }: { scope: ResourceScope }): React.ReactElement {
@@ -117,6 +117,7 @@ export function ResourceListScreen({ scope }: { scope: ResourceScope }): React.R
   return (
     <AppShell
       title={`Setup — ${scopeTitle(draft, scope)}`}
+      step={stepForRoute({ name: "resources", scope })}
       status={toast}
       onDisabledHint={(reason) => showToast(reason, "warn")}
       hints={[

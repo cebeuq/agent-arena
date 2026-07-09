@@ -27,14 +27,21 @@ export function FieldRow({
   return (
     <Box flexDirection="column">
       <Box>
-        <Text
-          color={selected ? theme.selectionFg : disabled ? theme.disabled : undefined}
-          backgroundColor={selected ? theme.selectionBg : undefined}
-          dimColor={disabled && !selected}
-        >
-          {`${marker} ${name.padEnd(labelWidth)} `}
-        </Text>
-        {children}
+        {/* Fixed-width, non-shrinking label cell: a long (wrapping) value used
+            to squeeze the label via flex shrink, shifting the value column a
+            few characters left of every other row. */}
+        <Box width={labelWidth + 3} flexShrink={0}>
+          <Text
+            color={selected ? theme.selectionFg : disabled ? theme.disabled : undefined}
+            backgroundColor={selected ? theme.selectionBg : undefined}
+            dimColor={disabled && !selected}
+          >
+            {`${marker} ${name.padEnd(labelWidth)} `}
+          </Text>
+        </Box>
+        <Box flexGrow={1} flexShrink={1}>
+          {children}
+        </Box>
       </Box>
       {error ? (
         <Text color={theme.error}>{`  ${" ".repeat(labelWidth)} ${error}`}</Text>

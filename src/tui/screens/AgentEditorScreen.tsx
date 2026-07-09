@@ -13,6 +13,7 @@ import { useEditorEscape } from "../components/editor-escape.js";
 import { useModal } from "../components/ModalProvider.js";
 import { openSelectPrompt, openTextPrompt } from "../components/prompts.js";
 import { useWizard } from "../app.js";
+import { stepForRoute } from "../routes.js";
 import { agentModelChoices, thinkingChoices, updateAgentDraft } from "../view-models/teams-vm.js";
 
 type FieldId = "harness" | "model" | "thinking" | "codename" | "team" | "captain" | "instructions" | "resources";
@@ -50,7 +51,7 @@ export function AgentEditorScreen({ agentId }: { agentId: string }): React.React
 
   if (!agent) {
     return (
-      <AppShell title="Setup — Edit agent" hints={[hint("Esc", "Back")]} status={toast}>
+      <AppShell title="Setup — Edit agent" step={stepForRoute({ name: "agentEditor", agentId })} hints={[hint("Esc", "Back")]} status={toast}>
         <Panel title="Edit agent" tone="warning">
           <Text color={theme.error}>Unknown agent {agentId}.</Text>
         </Panel>
@@ -226,6 +227,7 @@ export function AgentEditorScreen({ agentId }: { agentId: string }): React.React
   return (
     <AppShell
       title={`Setup — Edit agent ${agent.id}`}
+      step={stepForRoute({ name: "agentEditor", agentId })}
       status={toast}
       onDisabledHint={(reason) => showToast(reason, "warn")}
       hints={[
