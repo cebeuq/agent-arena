@@ -12,6 +12,7 @@ import { useToast } from "./components/useToast.js";
 import type { AppShellStatus } from "./components/AppShell.js";
 import { LayerContext } from "./layers.js";
 import { currentRoute, initialWizardState, wizardReducer, type WizardAction, type WizardInit, type WizardState } from "./state.js";
+import { BrowseScreen } from "./screens/BrowseScreen.js";
 import { ProjectScreen } from "./screens/ProjectScreen.js";
 import { TeamsScreen } from "./screens/TeamsScreen.js";
 import { AgentEditorScreen } from "./screens/AgentEditorScreen.js";
@@ -121,6 +122,7 @@ function WizardRoot({ init, onExit }: { init: WizardInit; onExit: (request: Exit
   return (
     <WizardContext.Provider value={value}>
       {route.name === "project" ? <ProjectScreen /> : null}
+      {route.name === "browse" ? <BrowseScreen /> : null}
       {route.name === "teams" ? <TeamsScreen /> : null}
       {route.name === "agentEditor" ? <AgentEditorScreen agentId={route.agentId} /> : null}
       {route.name === "task" ? <TaskScreen /> : null}

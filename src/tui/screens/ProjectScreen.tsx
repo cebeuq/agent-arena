@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { existsSync } from "node:fs";
 import { Box, Text } from "ink";
-import { createNewProject } from "../../setup.js";
 import { resolveGitRoot } from "../../worktree.js";
 import { draftFromConfig } from "../../tui-model.js";
 import { theme } from "../theme.js";
@@ -10,12 +9,13 @@ import { AppShell } from "../components/AppShell.js";
 import { Panel } from "../components/Panel.js";
 import { SelectList, type SelectListItem } from "../components/SelectList.js";
 import { useModal } from "../components/ModalProvider.js";
-import { openSelectPrompt, openTextPrompt } from "../components/prompts.js";
+import { openTextPrompt } from "../components/prompts.js";
 import { useWizard } from "../app.js";
 import { freshDraft } from "../state.js";
-import { loadExistingConfig, loadProjectSummary, type ProjectSummary } from "../view-models/project-vm.js";
+import { createProject, selectProject } from "./project-actions.js";
+import { loadProjectSummary, type ProjectSummary } from "../view-models/project-vm.js";
 
-type SourceValue = "__edit__" | "__new__" | "__pick__" | "__manual__" | "__create__";
+type SourceValue = "__edit__" | "__new__" | "__browse__" | "__manual__";
 
 function field(label: string, value: string, color?: string): React.ReactElement {
   return (
@@ -54,13 +54,10 @@ export function ProjectScreen(): React.ReactElement {
         label: state.existingConfig ? "New setup for this project" : "Use this project"
       });
     }
-    if (state.projectCandidates.length > 0) {
-      list.push({ value: "__pick__", label: `Pick a nearby repo… (${state.projectCandidates.length} found)` });
-    }
-    list.push({ value: "__manual__", label: "Enter a path…" });
-    list.push({ value: "__create__", label: "Create a new project…" });
+    list.push({ value: "__browse__", label: "Browse for a folder…" });
+    list.push({ value: "__manual__", label: "Type a path…" });
     return list;
-  }, [state.repoRoot, state.existingConfig, state.projectCandidates]);
+  }, [state.repoRoot, state.existingConfig]);
 
   const [selected, setSelected] = useState<SourceValue | undefined>(() => items[0]?.value);
 
@@ -70,51 +67,7 @@ export function ProjectScreen(): React.ReactElement {
     }
   }, [items, selected]);
 
-  async function selectProject(candidate: string): Promise<void> {
-    dispatch({ type: "setBusy", busy: { label: `Loading ${candidate}…` } });
-    try {
-      const resolvedRoot = resolveGitRoot(candidate);
-      const loaded = await loadExistingConfig(resolvedRoot);
-      dispatch({
-        type: "projectLoaded",
-        repoRoot: resolvedRoot,
-        config: loaded.existingConfig,
-        error: loaded.existingConfigError
-      });
-      if (loaded.existingConfigError) {
-        showToast(loaded.existingConfigError, "error");
-      } else {
-        showToast(`Loaded ${resolvedRoot}`, "info");
-      }
-    } catch {
-      showToast(
-        existsSync(candidate) ? "That path is not inside a git repository." : "That path does not exist.",
-        "error"
-      );
-    } finally {
-      dispatch({ type: "setBusy", busy: undefined });
-    }
-  }
-
-  async function createProject(target: string): Promise<void> {
-    dispatch({ type: "setBusy", busy: { label: `Creating ${target}…` } });
-    try {
-      const created = await createNewProject(target);
-      const loaded = await loadExistingConfig(created.repoRoot);
-      dispatch({
-        type: "projectLoaded",
-        repoRoot: created.repoRoot,
-        config: loaded.existingConfig,
-        error: loaded.existingConfigError
-      });
-      dispatch({ type: "setNotices", notices: created.warnings });
-      showToast(`Created ${created.repoRoot}`, "info");
-    } catch (error) {
-      showToast((error as Error).message, "error");
-    } finally {
-      dispatch({ type: "setBusy", busy: undefined });
-    }
-  }
+  const actions = { dispatch, showToast };
 
   function activate(value: SourceValue): void {
     if (value === "__edit__") {
@@ -127,54 +80,35 @@ export function ProjectScreen(): React.ReactElement {
       dispatch({ type: "push", route: { name: "teams" } });
       return;
     }
-    if (value === "__pick__") {
-      void openSelectPrompt(modal, {
-        title: "Pick a repository",
-        items: state.projectCandidates.map((candidate) => ({ value: candidate, label: candidate })),
-        height: Math.min(12, state.projectCandidates.length)
-      }).then((picked) => {
-        if (picked) {
-          void selectProject(picked);
-        }
-      });
+    if (value === "__browse__") {
+      dispatch({ type: "push", route: { name: "browse" } });
       return;
     }
-    if (value === "__manual__") {
-      void openTextPrompt(modal, {
-        title: "Project path",
-        label: "Absolute path, relative path, or . for the current directory.",
-        placeholder: "/path/to/repo",
-        // Inline validation keeps the prompt (and the typed path) open on a
-        // bad entry instead of discarding it behind a toast.
-        validate: (value) => {
-          const candidate = value.trim();
-          if (!candidate) {
-            return undefined;
-          }
-          if (!existsSync(candidate)) {
-            return "Path does not exist.";
-          }
-          try {
-            resolveGitRoot(candidate);
-            return undefined;
-          } catch {
-            return "Not a git repository.";
-          }
-        }
-      }).then((entered) => {
-        if (entered?.trim()) {
-          void selectProject(entered.trim());
-        }
-      });
-      return;
-    }
+    // __manual__: type a path directly (fast when you know it).
     void openTextPrompt(modal, {
-      title: "Create new project",
-      label: "Creates a git repo with README.md and .gitignore.",
-      placeholder: "/path/to/new-project"
+      title: "Project path",
+      label: "Absolute path, relative path, or . for the current directory.",
+      placeholder: "/path/to/repo",
+      // Inline validation keeps the prompt (and the typed path) open on a
+      // bad entry instead of discarding it behind a toast.
+      validate: (value) => {
+        const candidate = value.trim();
+        if (!candidate) {
+          return undefined;
+        }
+        if (!existsSync(candidate)) {
+          return "Path does not exist.";
+        }
+        try {
+          resolveGitRoot(candidate);
+          return undefined;
+        } catch {
+          return "Not a git repository.";
+        }
+      }
     }).then((entered) => {
       if (entered?.trim()) {
-        void createProject(entered.trim());
+        void selectProject(actions, entered.trim());
       }
     });
   }

@@ -11,6 +11,7 @@ export type Route =
   | { name: "agentEditor"; agentId: string }
   | { name: "resources"; scope: ResourceScope }
   | { name: "resourceForm"; scope: ResourceScope; index?: number; newType?: ArenaResourceType }
+  | { name: "browse" }
   | { name: "task" }
   | { name: "review" };
 
@@ -25,6 +26,9 @@ export const WIZARD_STEPS: Array<{ route: Route["name"]; title: string }> = [
 // screens are all part of Teams & Agents (except shared resources, edited
 // from the Task step).
 function parentStepRoute(route: Route): Route["name"] {
+  if (route.name === "browse") {
+    return "project";
+  }
   if (route.name === "agentEditor") {
     return "teams";
   }
