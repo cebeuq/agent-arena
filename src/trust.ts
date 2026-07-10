@@ -105,6 +105,7 @@ export function cursorTrustMarkerExists(workspace: string, home = os.homedir()):
 export type CursorSeedOptions = {
   home?: string;
   binary?: string;
+  model?: string;
   timeoutMs?: number;
   pollMs?: number;
 };
@@ -116,19 +117,25 @@ function sleep(ms: number): Promise<void> {
 export async function seedCursorTrust(workspace: string, options: CursorSeedOptions = {}): Promise<SeedOutcome> {
   const home = options.home ?? os.homedir();
   const binary = options.binary ?? "cursor-agent";
-  const timeoutMs = options.timeoutMs ?? 20000;
-  const pollMs = options.pollMs ?? 250;
+  // Uncontended the marker lands in ~1s, but a concurrent cursor process (the
+  // preflight model probe runs right before this) can delay it, so allow ample
+  // headroom.
+  const timeoutMs = options.timeoutMs ?? 45000;
+  const pollMs = options.pollMs ?? 200;
 
   if (cursorTrustMarkerExists(workspace, home)) {
     return { seeded: true, detail: "already trusted" };
   }
 
-  // `--trust` records trust for the cwd during CLI startup, before any model
-  // work happens. The empty prompt keeps it from doing anything else; we kill
-  // the process as soon as the marker appears.
+  // `-p --trust <prompt>` trusts the cwd and runs the prompt in print mode. A
+  // REAL (inert) prompt is required: an empty prompt makes cursor write a
+  // partial, hashed project dir and never record trust for git worktrees (the
+  // arena's workspaces). Passing the agent's model avoids a default-model
+  // surprise on accounts without one.
+  const args = ["-p", "--trust", ...(options.model ? ["--model", options.model] : []), "arena trust check"];
   let child;
   try {
-    child = spawn(binary, ["-p", "--trust", ""], {
+    child = spawn(binary, args, {
       cwd: workspace,
       stdio: "ignore",
       detached: false
@@ -138,18 +145,32 @@ export async function seedCursorTrust(workspace: string, options: CursorSeedOpti
   }
 
   let spawnError: Error | undefined;
+  let exitCode: number | null | undefined;
   child.on("error", (error) => {
     spawnError = error;
+  });
+  child.on("exit", (code) => {
+    exitCode = code;
   });
 
   const deadline = Date.now() + timeoutMs;
   try {
     for (;;) {
+      // Fast path: the marker appears while the prompt is still running, so we
+      // can kill the process early (trust is already persisted to disk).
       if (cursorTrustMarkerExists(workspace, home)) {
         return { seeded: true, detail: `trusted via ${binary} --trust` };
       }
       if (spawnError) {
         return { seeded: false, detail: `could not run ${binary}: ${spawnError.message}` };
+      }
+      // Fallback: under contention the marker check can lag, but a clean exit
+      // in --trust print mode means trust was recorded before the prompt ran.
+      if (exitCode !== undefined) {
+        if (exitCode === 0 || cursorTrustMarkerExists(workspace, home)) {
+          return { seeded: true, detail: `trusted via ${binary} --trust` };
+        }
+        return { seeded: false, detail: `${binary} exited ${exitCode ?? "unknown"} without recording trust` };
       }
       if (Date.now() >= deadline) {
         return { seeded: false, detail: `no trust marker after ${timeoutMs} ms` };
@@ -187,7 +208,7 @@ export async function preTrustWorkspaces(state: RunState, options: PreTrustOptio
     } else if (agent.preset === "codex") {
       outcome = seedCodexTrust(agent.workspace, home);
     } else if (agent.preset === "cursor") {
-      outcome = await seedCursorTrust(agent.workspace, { ...options.cursor, home, binary: agent.binary });
+      outcome = await seedCursorTrust(agent.workspace, { ...options.cursor, home, binary: agent.binary, model: agent.model });
     } else {
       outcome = { seeded: false, detail: `no trust seeding for preset ${agent.preset}` };
     }
@@ -195,4 +216,84 @@ export async function preTrustWorkspaces(state: RunState, options: PreTrustOptio
   }
 
   return results;
+}
+
+// Removes the trust entries seeded for a workspace. Called when a run is
+// cleaned so ephemeral worktree paths don't accumulate forever in each CLI's
+// trust store. Best-effort and never throws.
+export function untrustWorkspace(workspace: string, home = os.homedir()): void {
+  // Claude: drop the projects entry.
+  try {
+    const configPath = path.join(home, ".claude.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+      const projects = config.projects as Record<string, unknown> | undefined;
+      if (projects && workspace in projects) {
+        delete projects[workspace];
+        atomicWrite(configPath, JSON.stringify(config, null, 2));
+      }
+    }
+  } catch {
+    // Leave it.
+  }
+
+  // Codex: strip the [projects."<workspace>"] block (header + trust_level line,
+  // plus a leading blank line if present).
+  try {
+    const configPath = path.join(home, ".codex", "config.toml");
+    if (fs.existsSync(configPath)) {
+      const text = fs.readFileSync(configPath, "utf8");
+      const escaped = workspace.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+      const header = `[projects."${escaped}"]`;
+      if (text.includes(header)) {
+        const pattern = new RegExp(
+          `\\n*${escapeRegExp(header)}\\n[ \\t]*trust_level[ \\t]*=[ \\t]*"trusted"[ \\t]*\\n?`,
+          "g"
+        );
+        const next = text.replace(pattern, "\n");
+        atomicWrite(configPath, next.replace(/\n{3,}/g, "\n\n"));
+      }
+    }
+  } catch {
+    // Leave it.
+  }
+
+  // Cursor: remove the project dir for this workspace. Match by the marker's
+  // workspacePath when present, and also by the computed dir slug so partial
+  // dirs from a failed/interrupted seed (no marker written) are cleaned too.
+  try {
+    const projectsDir = path.join(home, ".cursor", "projects");
+    const resolved = path.resolve(workspace);
+    const slug = cursorProjectSlug(workspace);
+    for (const entry of fs.readdirSync(projectsDir)) {
+      const dir = path.join(projectsDir, entry);
+      let matches = entry === slug;
+      if (!matches) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(path.join(dir, ".workspace-trusted"), "utf8")) as {
+            workspacePath?: string;
+          };
+          matches = Boolean(parsed.workspacePath && path.resolve(parsed.workspacePath) === resolved);
+        } catch {
+          // No/unparseable marker: fall back to the slug match above.
+        }
+      }
+      if (matches) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  } catch {
+    // Leave it.
+  }
+}
+
+// Cursor derives a project dir name from the workspace path by replacing every
+// run of non-alphanumerics with a dash (very long paths are truncated and get
+// a hash suffix, which this does not reconstruct).
+function cursorProjectSlug(workspace: string): string {
+  return workspace.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-/, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

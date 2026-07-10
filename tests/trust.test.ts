@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { cursorTrustMarkerExists, seedClaudeTrust, seedCodexTrust, seedCursorTrust } from "../src/trust.js";
+import {
+  cursorTrustMarkerExists,
+  seedClaudeTrust,
+  seedCodexTrust,
+  seedCursorTrust,
+  untrustWorkspace
+} from "../src/trust.js";
 
 let tempDirs: string[] = [];
 
@@ -118,5 +124,60 @@ describe("cursor trust", () => {
     const home = await makeHome();
     const outcome = await seedCursorTrust(home, { home, binary: "/nonexistent-binary", timeoutMs: 1500, pollMs: 50 });
     expect(outcome.seeded).toBe(false);
+  });
+});
+
+describe("untrustWorkspace", () => {
+  it("removes the workspace from all three CLI trust stores, leaving others intact", async () => {
+    const home = await makeHome();
+    const ws = "/tmp/ws-gone";
+    const keep = "/tmp/ws-keep";
+
+    writeFileSync(
+      path.join(home, ".claude.json"),
+      JSON.stringify({ projects: { [ws]: { hasTrustDialogAccepted: true }, [keep]: { hasTrustDialogAccepted: true } } }),
+      "utf8"
+    );
+    mkdirSync(path.join(home, ".codex"), { recursive: true });
+    writeFileSync(
+      path.join(home, ".codex", "config.toml"),
+      `model = "x"\n\n[projects."${ws}"]\ntrust_level = "trusted"\n\n[projects."${keep}"]\ntrust_level = "trusted"\n`,
+      "utf8"
+    );
+    const cursorDir = path.join(home, ".cursor", "projects", "gone-slug");
+    mkdirSync(cursorDir, { recursive: true });
+    writeFileSync(path.join(cursorDir, ".workspace-trusted"), JSON.stringify({ workspacePath: ws }), "utf8");
+
+    untrustWorkspace(ws, home);
+
+    const claude = JSON.parse(await fs.readFile(path.join(home, ".claude.json"), "utf8"));
+    expect(claude.projects[ws]).toBeUndefined();
+    expect(claude.projects[keep]).toBeDefined();
+
+    const codex = await fs.readFile(path.join(home, ".codex", "config.toml"), "utf8");
+    expect(codex).not.toContain(`[projects."${ws}"]`);
+    expect(codex).toContain(`[projects."${keep}"]`);
+    expect(codex).toContain(`model = "x"`);
+
+    expect(existsSync(cursorDir)).toBe(false);
+  });
+
+  it("removes a partial cursor project dir (failed seed, no marker) by slug", async () => {
+    const home = await makeHome();
+    const ws = "/tmp/proj/.agent-arena/workspaces/run1/cu";
+    // Cursor slug: non-alphanumeric runs -> "-", leading dash stripped.
+    const slug = "tmp-proj-agent-arena-workspaces-run1-cu";
+    const dir = path.join(home, ".cursor", "projects", slug);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "repo.json"), "{}", "utf8"); // no .workspace-trusted
+
+    untrustWorkspace(ws, home);
+
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it("is a no-op when nothing is trusted", async () => {
+    const home = await makeHome();
+    expect(() => untrustWorkspace("/tmp/never", home)).not.toThrow();
   });
 });

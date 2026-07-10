@@ -12,6 +12,7 @@ import {
 } from "./run-state.js";
 import { pluralize } from "./format.js";
 import { killTmuxSession, killTmuxViewSessions } from "./tmux.js";
+import { untrustWorkspace } from "./trust.js";
 import type { RunState } from "./types.js";
 
 export type RunSummary = {
@@ -171,6 +172,12 @@ async function cleanSingleRun(entry: LocalRunState, options: CleanRunOptions): P
   let deletedBranches = 0;
 
   for (const agent of state.agents) {
+    // Drop the trust-store entries seeded for this workspace so ephemeral
+    // worktree paths don't pile up in ~/.claude.json, ~/.codex/config.toml,
+    // and ~/.cursor/projects across runs.
+    if (agent.preset) {
+      untrustWorkspace(agent.workspace);
+    }
     if (await pathExists(agent.workspace)) {
       // Mirrors are chmod'd read-only, so make everything writable before
       // git tries to unlink files.
