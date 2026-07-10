@@ -127,13 +127,44 @@ export function killTmuxViewSessions(sessionName: string): number {
 
 export type OpenAgentPaneResult = AttachResult & { error?: string };
 
-// Human-readable label for the surrounding tmux's prefix key (e.g. "C-b"), so
-// the viewer's status line can tell the user which keys close/detach it. When
-// the overseer runs inside the user's tmux, a viewer opened as a split obeys
-// that outer prefix. Defaults to C-b (tmux's default) if it can't be read.
-function currentTmuxPrefixLabel(tmux: TmuxRunner = runTmux): string {
+// Makes a peek (agent-pane view) session trivial and obvious to leave:
+//  - binds Alt-q (a non-prefix root key) to detach-client, so a single press
+//    closes the peek regardless of tmux prefix nesting — detaching ends the
+//    attach and closes the pane/window it opened in;
+//  - paints a bright status bar spelling out the close key.
+// Detaching leaves the run (and the view session) untouched, so it can be
+// reopened. The Alt-q binding lives on the arena tmux socket only, so it does
+// not affect the user's own tmux/cmux.
+function configureViewSessionExit(viewSession: string, tmux: TmuxRunner = runTmux): void {
   try {
-    const prefix = tmux(["display-message", "-p", "#{prefix}"]).trim();
+    tmux(["bind-key", "-T", "root", "M-q", "detach-client"]);
+  } catch {
+    // Non-fatal: the status bar still explains the standard prefix + d detach.
+  }
+  const prefix = viewSessionPrefixLabel(viewSession, tmux);
+  const hint = ` 🔍 PEEK — press Alt-q (or ${prefix} d) to close · the run keeps running `;
+  for (const option of [
+    ["status-right", hint],
+    ["status-right-length", String(hint.length + 2)],
+    ["status-right-style", "bg=colour214,fg=black,bold"],
+    // Left side just labels the view so it can't be mistaken for the run.
+    ["status-left", " AGENT ARENA · PEEK "],
+    ["status-left-length", "24"],
+    ["status-left-style", "bg=colour214,fg=black,bold"]
+  ]) {
+    try {
+      tmux(["set-option", "-t", viewSession, option[0], option[1]]);
+    } catch {
+      // Best effort.
+    }
+  }
+}
+
+// The view session's own prefix key label (e.g. "C-b"), for the status-bar
+// close hint. Defaults to C-b (tmux's default) if it can't be read.
+function viewSessionPrefixLabel(viewSession: string, tmux: TmuxRunner = runTmux): string {
+  try {
+    const prefix = tmux(["display-message", "-t", viewSession, "-p", "#{prefix}"]).trim();
     return prefix.length > 0 ? prefix : "C-b";
   } catch {
     return "C-b";
@@ -165,18 +196,7 @@ export function openAgentPaneExternal(state: RunState, agentId: string): OpenAge
   try {
     if (!tmuxSessionExists(viewSession)) {
       runTmux(["new-session", "-d", "-t", state.tmux.sessionName, "-s", viewSession]);
-      // The viewer's own status line is the one durable place to explain how
-      // to leave: when opened as a split inside the user's tmux, the outer
-      // prefix swallows single C-b, so the inner detach needs a doubled
-      // prefix (and prefix+x on the outer tmux kills the split outright).
-      const prefix = currentTmuxPrefixLabel();
-      runTmux([
-        "set-option",
-        "-t",
-        viewSession,
-        "status-right",
-        ` view only — close: ${prefix} x · detach: ${prefix} ${prefix} d `
-      ]);
+      configureViewSessionExit(viewSession);
     }
     runTmux(["select-window", "-t", `${viewSession}:${windowName}`]);
     if (agent.paneId) {

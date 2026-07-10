@@ -185,8 +185,8 @@ function OverseerRoot({
     }
     if (!result.launchedExternal && !result.attached && !result.openedInTmux) {
       void modal.confirm({
-        title: "Attach manually",
-        message: `Could not open a terminal automatically. Run this in another terminal:\n\n${result.command}\n\n${result.warnings.join("\n")}`,
+        title: "Peek at the agent",
+        message: `Run this in another terminal to watch the agent live:\n\n${result.command}\n\nClose the peek anytime with Alt-q (or Ctrl-b d) — the run keeps going.\n\n${result.warnings.join("\n")}`,
         confirmLabel: "OK",
         cancelLabel: "Close"
       });
@@ -194,9 +194,7 @@ function OverseerRoot({
     }
     const agent = snapshot.state.agents.find((candidate) => candidate.id === agentId);
     showToast(
-      result.openedInTmux
-        ? `Opened ${agent?.codename ?? agentId}'s pane in a tmux split next to this one.`
-        : `Opened ${agent?.codename ?? agentId}'s pane in an external terminal.`,
+      `Peeking at ${agent?.codename ?? agentId} — press Alt-q (or Ctrl-b d) to close it; the run keeps going.`,
       "info"
     );
   }
@@ -346,8 +344,8 @@ function OverseerRoot({
   const hints: KeyHint[] = [
     hint("1-4", "Views"),
     ...(view === "dashboard"
-      ? [hint("o", "Agent pane"), hint("O", "All tmux", { onPress: openTmux })]
-      : [hint("o", "Open tmux", { onPress: openTmux })]),
+      ? [hint("o", "Peek agent"), hint("O", "Peek all tmux", { onPress: openTmux })]
+      : [hint("o", "Peek tmux", { onPress: openTmux })]),
     hint("p", "Pressure", {
       onPress: sendPressureAction,
       disabled: readOnly,

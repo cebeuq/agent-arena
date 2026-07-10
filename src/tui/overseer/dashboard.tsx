@@ -149,8 +149,7 @@ export function DashboardView(): React.ReactElement {
           onDisabledActivate={(reason) => showToast(reason, "warn")}
         />
         <Text color={theme.dim} wrap="truncate">
-          Enter opens chat with the agent (or judging when it has a pending claim). o opens the agent's terminal
-          pane. j judges.
+          Enter chats (or judges a claim). o peeks at the agent's live pane (Alt-q closes the peek). j judges.
         </Text>
       </Panel>
       <Panel title={selectedAgent ? `${selectedAgent.codename} (${selectedAgent.id})` : "No agent selected"}>
