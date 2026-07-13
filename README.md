@@ -1,4 +1,4 @@
-# Agent Arena (WIP)
+# Agent Arena 
 
 Agent Arena runs coding-agent CLIs against the same task in isolated git worktrees. Each agent gets its own workspace, a live tmux pane, refreshed read-only mirrors of rival workspaces, and a claim command. Runs can be manually judged or verifier-judged.
 
